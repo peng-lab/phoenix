@@ -15,7 +15,6 @@ from torch.utils.checkpoint import checkpoint
 
 from apex.normalization import FusedRMSNorm
 from flash_attn import flash_attn_func
-from flash_perceiver import Perceiver
 from xformers.ops import SwiGLU
 
 #--------------------------------------------------------------------------------
