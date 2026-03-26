@@ -1,6 +1,6 @@
 """
 Autoencoder model based on MLP-Mixer
-© Manuel Tran / Helmholtz Munich
+© Peng Lab / Helmholtz Munich
 """
 
 from typing import Optional
