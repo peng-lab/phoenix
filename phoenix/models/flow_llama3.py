@@ -1,6 +1,6 @@
 """
 Flow matching model based on Transformer
-© Manuel Tran / Helmholtz Munich
+© Peng Lab / Helmholtz Munich
 """
 
 import math
