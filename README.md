@@ -1,2 +1,2 @@
 # Phoenix 🐦‍🔥
-Biologically accurate prediction of spatially resolved gene expressions from histology images
+Phoenix reveals the spatial mechanisms of cancer de novo from routine histology
