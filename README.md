@@ -18,6 +18,8 @@ pip install git+https://github.com/peng-lab/phoenix
 
 To load the vision encoder and flow transformer use
 ```python
+from github.models.flow_simple import FlowTransformerModel, FlowTransformerConfig
+
 vision_model = timm.create_model(
     "hf-hub:bioptimus/H-optimus-1",
     pretrained=True,
