@@ -1,7 +1,13 @@
+"""
+Flow matching inference based on ODE solver
+© Peng Lab / Helmholtz Munich
+"""
+
 import numpy as np
 import torch
 import torch.nn as nn
 
+from torch.utils.data import DataLoader
 from tqdm import tqdm
 from zuko.utils import odeint
 
@@ -48,7 +54,7 @@ class FlowPipeline:
         self.device = next(self.model.parameters()).device
 
     @torch.no_grad()
-    def __call__(self, gene_list, dataloader):
+    def __call__(self, gene_list: list, dataloader: DataLoader):
         """
         Run the flow model on every batch in the dataloader.
         """
