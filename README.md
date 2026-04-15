@@ -9,6 +9,8 @@ Phoenix is a (latent) flow matching generative model that predicts spatially res
 
 <img src="github/Figure-1.png" width="800"/>
 
+<br>
+
 ### Phoenix is simple and easy to use
 
 We can install Phoenix with the following command
