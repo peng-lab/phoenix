@@ -1,2 +1,4 @@
 # Phoenix 🐦‍🔥
 ### Phoenix reveals the spatial mechanisms of cancer de novo from routine histology
+
+<img src="github/figure-1.png" width="800"/>
