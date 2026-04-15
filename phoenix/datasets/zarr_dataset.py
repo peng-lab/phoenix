@@ -1,5 +1,5 @@
-"""
-Spatial dataset based on SpatialData
+""" 
+Spatial transcriptomics dataset based on SpatialData
 © Peng Lab / Helmholtz Munich
 """
 
