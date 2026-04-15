@@ -10,6 +10,6 @@ setup(
         #"torch==2.6.0",
         #"torchvision==0.21.0",
         #"transformers==4.55.4",
-        #"zuko==1.3.0",
+        "zuko==1.3.0",
     ],
 )
