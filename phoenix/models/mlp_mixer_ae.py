@@ -31,7 +31,7 @@ class SwiGLUFFNFused(nn.Module):
         super().__init__()
         d_hidden = ffn_mult * d_input
         d_hidden = int(2 * d_hidden / 3)
-        d_hidden = (d_hidden // 64) * 64
+        d_hidden = (d_hidden // 2) * 2
 
         self.swiglu = SwiGLU(
             in_features=d_input,
@@ -247,8 +247,8 @@ class MixerAutoencoder(nn.Module):
         self.norm = nn.LayerNorm(
             normalized_shape=d_tokens,
             eps=1e-5,
-            elementwise_affine=True,
-            bias=True,
+            elementwise_affine=False,
+            bias=False,
         )
         if levels:
             self.quantizer = FSQ(levels=levels)
