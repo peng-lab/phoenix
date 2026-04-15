@@ -16,6 +16,50 @@ We can install Phoenix with the following command
 pip install git+https://github.com/peng-lab/phoenix
 ```
 
+We now load the gene list, normalization statistics, and image patches
+```python
+import numpy as np
+
+from torch.utils.data import DataLoader
+from torchvision.transforms import v2
+from torchvision.transforms import InterpolationMode
+
+from github.datasets.h5py_dataset import H5PYDataset
+
+gene_path = './xenium_human_multi.npy'
+gene_list = list(np.load(gene_path))
+
+stats_path = "./tenx-multi-table.npz"
+statistics = np.load(stats_path)
+
+bicubic = InterpolationMode.BICUBIC
+image_transform = v2.Compose(
+    [
+        v2.Resize((224, 224), bicubic),
+        v2.CenterCrop((224, 224)),
+        v2.ToTensor(),
+        v2.Normalize(
+            (0.707223, 0.578729, 0.703617),
+            (0.211883, 0.230117, 0.177517),
+        ),
+    ]
+)
+
+image_path = "./demo_patch.h5"
+dataset = H5PYDataset(
+    image_path=image_path,
+    transform=image_transform,
+)
+dataloader = DataLoader(
+    dataset,
+    batch_size=128,
+    shuffle=False,
+    num_workers=4,
+    pin_memory=True,
+)
+print('Length dataset & dataloader:', (len(dataset), len(dataloader)))
+```
+
 To load the vision encoder and flow transformer use
 ```python
 from github.models.flow_simple import FlowTransformerModel, FlowTransformerConfig
