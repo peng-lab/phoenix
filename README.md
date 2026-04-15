@@ -16,14 +16,12 @@ We can install Phoenix with the following command
 pip install git+https://github.com/peng-lab/phoenix
 ```
 
-We now load the gene list, normalization statistics, and image patches
+We now load the image patches saved in an H5 file
 ```python
 import numpy as np
-
 from torch.utils.data import DataLoader
 from torchvision.transforms import v2
 from torchvision.transforms import InterpolationMode
-
 from github.datasets.h5py_dataset import H5PYDataset
 
 gene_path = './xenium_human_multi.npy'
