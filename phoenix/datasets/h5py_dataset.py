@@ -1,5 +1,5 @@
 """ 
-Spatial dataset based on H5PY
+Spatial transcriptomics dataset based on H5PY
 © Peng Lab / Helmholtz Munich
 """
 
