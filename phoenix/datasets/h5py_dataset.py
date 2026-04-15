@@ -12,7 +12,7 @@ from torch.utils.data import Dataset
 
 class H5PYDataset(Dataset):
     """
-    The spatial transcriptomics dataset class for H5PY.
+    The spatial transcriptomics dataset class based on H5PY.
     """
     def __init__(self, image_path: str, transform=None):
         """
