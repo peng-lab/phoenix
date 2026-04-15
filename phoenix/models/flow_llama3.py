@@ -443,11 +443,12 @@ class FlowTransformerModel(nn.Module):
             hidden_size=cfg.d_model,
             freq_emb_size=256,
         )
-        self.y_embedding = LabelEmbedder(
-            num_classes=cfg.n_classes,
-            hidden_size=cfg.d_model,
-            dropout_prob=cfg.cls_drop
-        )
+        if cfg.n_classes > 0:
+            self.y_embedding = LabelEmbedder(
+                num_classes=cfg.n_classes,
+                hidden_size=cfg.d_model,
+                dropout_prob=cfg.cls_drop
+            )
         self.layers = nn.ModuleList([])
         for _ in range(2):
             self.layers.append(ClassicalTransformerBlock(cfg))
@@ -467,8 +468,7 @@ class FlowTransformerModel(nn.Module):
         # extract image features from vision model
         if self.vision_model:
             with torch.no_grad():
-                #c = self.vision_model.forward_features(c)
-                c = self.vision_model(c)
+                c = self.vision_model.forward_features(c)
         return c
 
     def forward(self, x: Tensor, t: Tensor, c: Tensor = None, y: Tensor = None):
@@ -495,7 +495,7 @@ class FlowTransformerModel(nn.Module):
 
         # embed time and labels, then add them
         t = self.t_embedding(t)
-        if y is not None:
+        if self.cfg.n_classes > 0 and y is not None:
             t = t + self.y_embedding(y, self.training)
 
         # process tokens in the transformer blocks
@@ -556,6 +556,7 @@ class FlowTransformerConfig:
 if __name__ == "__main__":
 
     model = FlowTransformerModel(FlowTransformerConfig(), None).cuda()
+    optimizer = torch.optim.AdamW(model.parameters())
     print('Model:', sum(p.numel() for p in model.parameters()) / 1e+6)
 
     x = torch.rand(1, 64, 8).cuda()
@@ -563,4 +564,17 @@ if __name__ == "__main__":
     c = torch.rand(1, 256, 1536).cuda()
 
     output = model(x, t, c)
-    print(output.size())
+    print("Output:", output.size())
+
+    loss = (output**2).mean()
+    print(f"Loss: {loss.item():.6f}")
+
+    optimizer.zero_grad()
+    loss.backward()
+    optimizer.step()
+
+    output = model(x, t, c)
+    print("Output:", output.size())
+
+    loss = (output**2).mean()
+    print(f"Loss: {loss.item():.6f}")
