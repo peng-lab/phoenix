@@ -29,7 +29,7 @@ from github.datasets.h5py_dataset import H5PYDataset
 gene_path = './xenium_human_multi.npy'
 gene_list = list(np.load(gene_path))
 
-stats_path = "./tenx-multi-table.npz"
+stats_path = "./stats_table.npz"
 statistics = np.load(stats_path)
 
 bicubic = InterpolationMode.BICUBIC
@@ -65,8 +65,11 @@ To load the vision encoder and flow transformer use
 from github.models.flow_simple import FlowTransformerModel, FlowTransformerConfig
 
 vision_model = timm.create_model(
-    "hf-hub:bioptimus/H-optimus-1",
-    pretrained=True,
+    "vit_giant_patch14_reg4_dinov2",
+    pretrained=False,
+    img_size=224,
+    num_classes=0,
+    global_pool="token",
     init_values=1e-5,
     dynamic_img_size=False,
 )
