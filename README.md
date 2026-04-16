@@ -118,8 +118,8 @@ pipeline = FlowPipeline(
     stats=statistics,
     t_0=0.0,
     t_1=1.0,
-    atol=1e-0,
-    rtol=1e-0,
+    atol=1e-1,
+    rtol=1e-1,
 )
 
 gex_pred, coords_list = pipeline(gene_list, dataloader)
