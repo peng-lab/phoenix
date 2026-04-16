@@ -1,7 +1,7 @@
 # Phoenix 🐦‍🔥
 ### Phoenix reveals the spatial mechanisms of cancer de novo from routine histology
 
-[[preprint](https://www.medrxiv.org/content/10.1101/2024.03.15.24304211v1)] [[weights](https://huggingface.co/peng-lab/phoenix)] [[notebook](https://github.com/peng-lab/phoenix/blob/main/phoenix_demo.ipynb)]
+[[preprint]()] [[weights](https://huggingface.co/peng-lab/phoenix)] [[notebook](https://github.com/peng-lab/phoenix/blob/main/phoenix_demo.ipynb)]
 
 [![Open In Colab](https://colab.research.google.com/assets/colab-badge.svg)](https://github.com/peng-lab/phoenix/blob/main/phoenix_demo.ipynb)
 
