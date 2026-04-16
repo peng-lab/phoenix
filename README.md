@@ -121,3 +121,17 @@ pipeline = FlowPipeline(
 
 gex_pred, coords_list = pipeline(gene_list, dataloader)
 ```
+
+### Citation
+
+In case you found our work useful, please consider citing us:
+```
+@article{tran/gindra2026phoenix,
+  title={Phoenix reveals the spatial mechanisms of cancer de novo from routine histology},
+  author={Manuel Tran & Rushin H. Gindra, et al.},
+  journal={biorxiv},
+  pages={2026--04},
+  year={2026},
+  publisher={Cold Spring Harbor Laboratory Press}
+}
+```
