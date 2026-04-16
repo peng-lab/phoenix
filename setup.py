@@ -6,6 +6,7 @@ setup(
     description="Phoenix - PyTorch",
     packages=find_packages(exclude=[]),
     install_requires=[
+        "anndata==0.12.2",
         #"timm==1.0.19",
         #"torch==2.6.0",
         #"torchvision==0.21.0",
