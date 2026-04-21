@@ -1,5 +1,5 @@
 # Phoenix 🐦‍🔥
-### Phoenix reveals the spatial mechanisms of cancer de novo from routine histology
+### Pan-cancer virtual spatial transcriptomics from routine histology with Phoenix
 
 [[preprint]()] [[weights](https://huggingface.co/peng-lab/phoenix)] [[notebook](https://github.com/peng-lab/phoenix/blob/main/phoenix_demo.ipynb)]
 
