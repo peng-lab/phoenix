@@ -130,7 +130,7 @@ gex_pred, coords_list = pipeline(gene_list, dataloader)
 In case you found our work useful, please consider citing us:
 ```
 @article{tran/gindra2026phoenix,
-  title={Phoenix reveals the spatial mechanisms of cancer de novo from routine histology},
+  title={Pan-cancer virtual spatial transcriptomics from routine histology with Phoenix},
   author={Manuel Tran & Rushin H. Gindra, et al.},
   journal={biorxiv},
   pages={2026--04},
