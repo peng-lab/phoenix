@@ -131,9 +131,9 @@ In case you found our work useful, please consider citing us:
 ```
 @article{tran/gindra2026.04.25.720812,
 	author = {Tran, Manuel and Gindra, Rushin H. and Putze, Philipp and Senbai, Kang and Palla, Giovanni and Kos, Tina and Falcomat{\`a}, Chiara and Wang, Chen and Guo, Ruifeng (Ray) and Boxberg, Melanie and Berclaz, Luc M. and Lindner, Lars H. and Bergmayr, Linda and Kn{\"o}sel, Thomas and Jurmeister, Philipp and Klauschen, Frederick and Homicsko, Krisztian and Gottardo, Raphael and Eckstein, Markus and Matek, Christian and Mock, Andreas and Theis, Fabian J. and Saur, Dieter and Peng, Tingying},
-	journal = {bioRxiv},
 	title = {Pan-cancer virtual spatial transcriptomics from routine histology with Phoenix},
 	year = {2026},
+	journal = {bioRxiv},
 	doi = {https://doi.org/10.64898/2026.04.25.720812},
 }
 ```
