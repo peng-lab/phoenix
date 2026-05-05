@@ -1,7 +1,7 @@
 # Phoenix 🐦‍🔥
 ### Pan-cancer virtual spatial transcriptomics from routine histology with Phoenix
 
-[[preprint]()] [[weights](https://huggingface.co/peng-lab/phoenix)] [[notebook](https://github.com/peng-lab/phoenix/blob/main/phoenix_demo.ipynb)]
+[[preprint](https://doi.org/10.64898/2026.04.25.720812)] [[weights](https://huggingface.co/peng-lab/phoenix)] [[notebook](https://github.com/peng-lab/phoenix/blob/main/phoenix_demo.ipynb)]
 
 [![Open In Colab](https://colab.research.google.com/assets/colab-badge.svg)](https://github.com/peng-lab/phoenix/blob/main/phoenix_demo.ipynb)
 
@@ -129,12 +129,10 @@ gex_pred, coords_list = pipeline(gene_list, dataloader)
 
 In case you found our work useful, please consider citing us:
 ```
-@article{tran/gindra2026phoenix,
-  title={Pan-cancer virtual spatial transcriptomics from routine histology with Phoenix},
-  author={Manuel Tran & Rushin H. Gindra, et al.},
-  journal={biorxiv},
-  pages={2026--04},
-  year={2026},
-  publisher={Cold Spring Harbor Laboratory Press}
-}
+@article{tran/gindra2026.04.25.720812,
+	author = {Tran, Manuel and Gindra, Rushin H. and Putze, Philipp and Senbai, Kang and Palla, Giovanni and Kos, Tina and Falcomat{\`a}, Chiara and Wang, Chen and Guo, Ruifeng (Ray) and Boxberg, Melanie and Berclaz, Luc M. and Lindner, Lars H. and Bergmayr, Linda and Kn{\"o}sel, Thomas and Jurmeister, Philipp and Klauschen, Frederick and Homicsko, Krisztian and Gottardo, Raphael and Eckstein, Markus and Matek, Christian and Mock, Andreas and Theis, Fabian J. and Saur, Dieter and Peng, Tingying},
+	journal = {bioRxiv},
+	title = {Pan-cancer virtual spatial transcriptomics from routine histology with Phoenix},
+	year = {2026}}
+
 ```
