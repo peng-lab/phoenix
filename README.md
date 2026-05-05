@@ -62,6 +62,7 @@ print('Length dataset & dataloader:', (len(dataset), len(dataloader)))
 
 To load the vision encoder and flow transformer use
 ```python
+#from phoenix.models.flow_llama3 import FlowTransformerModel, FlowTransformerConfig
 from github.models.flow_simple import FlowTransformerModel, FlowTransformerConfig
 
 vision_model = timm.create_model(
