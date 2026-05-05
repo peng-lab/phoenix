@@ -110,7 +110,7 @@ output = flow_model(x, t, c)
 print("Output:", output.size())
 ```
 
-To predict gene expression from histology image use
+To predict gene expression from histology images use
 ```python
 from github.helpers.inference import FlowPipeline
 
