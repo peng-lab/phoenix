@@ -5,7 +5,7 @@
 
 [![Open In Colab](https://colab.research.google.com/assets/colab-badge.svg)](https://github.com/peng-lab/phoenix/blob/main/phoenix_demo.ipynb)
 
-Phoenix is a (latent) flow matching generative model that predicts spatially resolved single-cell gene expression directly from routine H&E-stained histology images. It generalizes across cohorts, donors, organs, and tissues — enabling in silico analysis of treatment response and tissue organization at population scale.
+Phoenix is a (latent) flow matching generative model that predicts spatially resolved single-cell gene expression directly from routine H&E-stained histology images. It generalizes across cohorts, donors, organs, and tissues — enabling in silico analysis of tissue organization and treatment response at population scale.
 
 <img src="github/figure-1.jpg" width="800"/>
 
