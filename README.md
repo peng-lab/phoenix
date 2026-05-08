@@ -60,10 +60,16 @@ dataloader = DataLoader(
 print('Length dataset & dataloader:', (len(dataset), len(dataloader)))
 ```
 
+To load the model weights hosted on HuggingFace use
+```
+#https://huggingface.co/peng-lab/phoenix/resolve/main/weights/flow/tenx/multi/cell/20x/discrete/flow_model.pth
+https://huggingface.co/peng-lab/phoenix/resolve/main/weights/flow/nest/multi/cell/20x/discrete/flow_model.pth
+```
+
 To load the vision encoder and flow transformer use
 ```python
-#from phoenix.models.flow_llama3 import FlowTransformerModel, FlowTransformerConfig
-from github.models.flow_simple import FlowTransformerModel, FlowTransformerConfig
+from phoenix.models.flow_llama3 import FlowTransformerModel, FlowTransformerConfig
+#from github.models.flow_simple import FlowTransformerModel, FlowTransformerConfig
 
 vision_model = timm.create_model(
     "vit_giant_patch14_reg4_dinov2",
