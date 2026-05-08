@@ -13,12 +13,12 @@ Phoenix is a (latent) flow matching generative model that predicts spatially res
 
 ### Phoenix is simple and easy to use
 
-We can install Phoenix with the following command
+You can install Phoenix with the following command
 ```
 pip install git+https://github.com/peng-lab/phoenix
 ```
 
-We now load the image patches saved in an H5 file
+To load the 224x224 patches saved in an H5 file use
 ```python
 import numpy as np
 from torch.utils.data import DataLoader
