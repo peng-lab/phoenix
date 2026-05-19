@@ -6,9 +6,9 @@ setup(
     description="Phoenix - PyTorch",
     packages=find_packages(exclude=[]),
     install_requires=[
-        #apex==0.1",
+        #"apex==0.1",
         "anndata==0.12.2",
-        #flash_attn==2.7.4.post1",
+        #"flash_attn==2.7.4.post1",
         #"h5py==3.14.0",
         #"openslide-python==1.4.2",
         #"timm==1.0.19",
