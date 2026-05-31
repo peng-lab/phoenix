@@ -1,3 +1,8 @@
+"""
+Fast and simple cell nuclei segmentation
+© Peng Lab / Helmholtz Munich
+"""
+
 import h5py
 import numpy as np
 import openslide
@@ -6,6 +11,7 @@ from pathlib import Path
 from skimage import io, measure
 from tqdm import tqdm
 
+#------------------------------------------------------------------------------------------
 
 class NucleiPatchExtractor:
     """
