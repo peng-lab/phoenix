@@ -63,9 +63,9 @@ class FlowPipeline:
 
         pred_list, coords_list = [], []
         for batch in tqdm(dataloader, desc='Flow sampling'):
-            image, coords = batch[0].cuda(), batch[1]
+            image, coords = batch[0].to(device), batch[1]
             feats = self.model.vision_forward(image)
-            noise = torch.randn(image.size(0), len(gene_list), 1).cuda()
+            noise = torch.randn(image.size(0), len(gene_list), 1, device=device)
 
             gex_pred = run_flow(
                 flow_model=self.model,

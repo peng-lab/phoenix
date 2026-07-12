@@ -24,7 +24,7 @@ import numpy as np
 from torch.utils.data import DataLoader
 from torchvision.transforms import v2
 from torchvision.transforms import InterpolationMode
-from github.datasets.h5py_dataset import H5PYDataset
+from phoenix.datasets.h5py_dataset import H5PYDataset
 
 gene_path = './xenium_human_multi.npy'
 gene_list = list(np.load(gene_path))
@@ -122,7 +122,7 @@ print("Output:", output.size())
 
 To predict gene expression from histology images use
 ```python
-from github.helpers.inference import FlowPipeline
+from phoenix.helpers.inference import FlowPipeline
 
 pipeline = FlowPipeline(
     model=flow_model,
