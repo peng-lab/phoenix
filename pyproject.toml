@@ -30,7 +30,6 @@ dependencies = [
   "numpy",
   "pillow",
   "pyyaml",
-  "scikit-learn",
   "scipy",
   # for debug logging (referenced from the issue template)
   "session-info2",
@@ -187,7 +186,6 @@ module = [
   "pytorch_lightning.*",
   "scipy.*",
   "skimage.*",
-  "sklearn.*",
   "spatialdata.*",
   "timm.*",
   "torchvision.*",
