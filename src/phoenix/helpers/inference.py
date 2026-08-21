@@ -1,5 +1,6 @@
 """
-Flow matching inference based on ODE solver
+Flow matching inference based on ODE solver.
+
 © Peng Lab / Helmholtz Munich
 """
 

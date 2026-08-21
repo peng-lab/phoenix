@@ -1,5 +1,6 @@
 """
-Spatial transcriptomics dataset based on H5PY
+Spatial transcriptomics dataset based on H5PY.
+
 © Peng Lab / Helmholtz Munich
 """
 
@@ -60,7 +61,5 @@ class H5PYDataset(Dataset):
         return patch, coord
 
     def __len__(self):
-        """
-        Return the number of patches in the dataset.
-        """
+        """Return the number of patches in the dataset."""
         return self.num_samples

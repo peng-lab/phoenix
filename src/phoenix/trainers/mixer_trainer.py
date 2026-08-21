@@ -1,5 +1,6 @@
 """
-Lightning class for classical autoencoder
+Lightning class for classical autoencoder.
+
 © Peng Lab / Helmholtz Munich
 """
 
@@ -164,17 +165,13 @@ class MixerTrainer(pl.LightningModule):
         self.weight_decay = cfg.weight_decay
 
     def on_train_start(self):
-        """
-        Initialize the optimizer on re-start.
-        """
+        """Initialize the optimizer on re-start."""
         self.optimizers(use_pl_optimizer=False).param_groups[0]["lr"]
         self.optimizers(use_pl_optimizer=False).param_groups[0]["weight_decay"]
         self.optimizers().param_groups = self.optimizers()._optimizer.param_groups
 
     def on_train_batch_end(self, *_):
-        """
-        Update the scheduler after every step.
-        """
+        """Update the scheduler after every step."""
         scheduler = self.lr_schedulers()
         scheduler.step()
 

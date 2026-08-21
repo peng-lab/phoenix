@@ -1,5 +1,6 @@
 """
-Fast and simple cell nuclei segmentation
+Fast and simple cell nuclei segmentation.
+
 © Peng Lab / Helmholtz Munich
 """
 

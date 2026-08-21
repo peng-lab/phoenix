@@ -170,9 +170,6 @@ lint.ignore = [
 ]
 lint.per-file-ignores."*/__init__.py" = [ "F401" ]
 lint.per-file-ignores."docs/*" = [ "I" ]
-# TEMPORARY: the pre-existing src/phoenix/** modules don't have numpydoc-style docstrings yet.
-# Tracked for the follow-up conformance PR; remove this line once that lands.
-lint.per-file-ignores."src/phoenix/**" = [ "D" ]
 lint.per-file-ignores."tests/*" = [ "D" ]
 lint.pydocstyle.convention = "numpy"
 

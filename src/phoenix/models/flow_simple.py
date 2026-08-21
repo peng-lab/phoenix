@@ -1,5 +1,6 @@
 """
-Flow matching model based on Transformer
+Flow matching model based on Transformer.
+
 © Peng Lab / Helmholtz Munich
 """
 
@@ -420,8 +421,7 @@ class FlashAttention(nn.Module):
     @torch.autocast(device_type="cuda", dtype=torch.bfloat16)
     def forward(self, x: Tensor, c: Tensor | None = None):
         """
-        Apply attention, using `x` as query and `c` (or `x`, if `c` is `None`) as
-        key/value.
+        Apply attention, using `x` as query and `c` (or `x`, if `c` is `None`) as key/value.
 
         Parameters
         ----------
@@ -513,8 +513,7 @@ class ClassicalTransformerBlock(nn.Module):
 
     def forward(self, x: Tensor):
         """
-        Apply self-attention followed by a feed-forward network, each with a
-        pre-norm residual connection.
+        Apply self-attention followed by a feed-forward network, each with a pre-norm residual connection.
 
         Parameters
         ----------

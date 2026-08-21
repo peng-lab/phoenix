@@ -1,5 +1,6 @@
 """
-Plotting helpers for comparing true and predicted spatial gene expression
+Plotting helpers for comparing true and predicted spatial gene expression.
+
 © Peng Lab / Helmholtz Munich
 """
 

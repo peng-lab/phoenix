@@ -1,5 +1,6 @@
 """
-Autoencoder model based on MLP-Mixer
+Autoencoder model based on MLP-Mixer.
+
 © Peng Lab / Helmholtz Munich
 """
 

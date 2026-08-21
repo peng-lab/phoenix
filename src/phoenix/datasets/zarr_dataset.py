@@ -1,5 +1,6 @@
 """
-Spatial transcriptomics dataset based on SpatialData
+Spatial transcriptomics dataset based on SpatialData.
+
 © Peng Lab / Helmholtz Munich
 """
 
@@ -228,7 +229,5 @@ class SpatialDataset(Dataset):
         return image, np.array([x_center_shape, y_center_shape])
 
     def __len__(self):
-        """
-        Return the number of cells in the dataset.
-        """
+        """Return the number of cells in the dataset."""
         return self.adata.shape[0]
