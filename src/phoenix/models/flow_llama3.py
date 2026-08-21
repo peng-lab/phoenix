@@ -337,7 +337,7 @@ class FlashAttention(nn.Module):
         self.dropout = nn.Dropout(proj_drop)
 
     @torch.autocast(device_type="cuda", dtype=torch.bfloat16)
-    def forward(self, x: Tensor, c: Tensor | None = None):
+    def forward(self, x: Tensor, c: Tensor | None = None, kv: tuple | None = None):
         """
         Apply attention, using `x` as query and `c` (or `x`, if `c` is `None`) as key/value.
 
@@ -348,6 +348,9 @@ class FlashAttention(nn.Module):
         c
             Optional key/value input, shape ``(batch, tokens_c, d_cross)``; falls
             back to self-attention on `x` when `None`.
+        kv
+            Optional precomputed ``(key, value)`` projections, each of shape
+            ``(batch, tokens_c, n_heads, d_head)``; when given, `c` is ignored.
 
         Returns
         -------
@@ -360,15 +363,19 @@ class FlashAttention(nn.Module):
             c_bsz, c_sql, _ = x.shape
 
         xq = self.weight_q(x)  # inputs serve as query
-        xk = self.weight_k(c if c is not None else x)
-        xv = self.weight_v(c if c is not None else x)
-
         xq = xq.view(x_bsz, x_sql, self.n_heads, self.d_head)
-        xk = xk.view(c_bsz, c_sql, self.n_heads, self.d_head)
-        xv = xv.view(c_bsz, c_sql, self.n_heads, self.d_head)
-
         xq = self.norm_q(xq)
-        xk = self.norm_k(xk)
+
+        if kv is not None:
+            xk, xv = kv  # precomputed by the caller
+            if xk.shape[0] != x_bsz:
+                raise ValueError(f"cached k/v batch {xk.shape[0]} != query batch {x_bsz}")
+        else:
+            xk = self.weight_k(c if c is not None else x)
+            xv = self.weight_v(c if c is not None else x)
+            xk = xk.view(c_bsz, c_sql, self.n_heads, self.d_head)
+            xv = xv.view(c_bsz, c_sql, self.n_heads, self.d_head)
+            xk = self.norm_k(xk)
 
         xo = flash_attn_func(
             xq,
@@ -524,7 +531,7 @@ class FlowTransformerBlock(nn.Module):
             ),
         )
 
-    def forward(self, x: Tensor, t: Tensor, c: Tensor | None = None):
+    def forward(self, x: Tensor, t: Tensor, c: Tensor | None = None, kv: tuple | None = None):
         """
         Apply one flow-matching transformer block.
 
@@ -537,6 +544,9 @@ class FlowTransformerBlock(nn.Module):
             ``(batch, d_model)``.
         c
             Conditioning tokens for cross-attention, shape ``(batch, tokens_c, d_cross)``.
+        kv
+            Optional precomputed ``(key, value)`` projections for the cross-attention;
+            when given, `c` is ignored.
 
         Returns
         -------
@@ -549,7 +559,7 @@ class FlowTransformerBlock(nn.Module):
         r = self.zattn(modulate(self.norm_1(x), shift_zattn, scale_zattn))
         x = x + gate_zattn.unsqueeze(1) * r
 
-        r = self.xattn(self.norm_2(x), c)
+        r = self.xattn(self.norm_2(x), c, kv)
         x = x + r
 
         r = self.mlp(modulate(self.norm_3(x), shift_mlp, scale_mlp))
