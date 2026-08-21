@@ -1,25 +1,39 @@
-""" 
+"""
 Lightning class for classical autoencoder
 © Peng Lab / Helmholtz Munich
 """
 
-import yaml
-
 from dataclasses import dataclass
-from typing import Dict, List, Tuple, Union
 
 import pytorch_lightning as pl
 import torch
 import torch.optim as optim
-
+import yaml
 from torch import Tensor as Tensor
 from torch.nn import functional as F
 from torch.optim.lr_scheduler import _LRScheduler
 
-#-------------------------------------------------------------------------------
+# -------------------------------------------------------------------------------
 
 
-def move_to(object: Union[Tensor, Dict, List, None], device: torch.device):
+def move_to(object: Tensor | dict | list | None, device: torch.device):
+    """
+    Recursively move a tensor, or a (possibly nested) list/dict of tensors, to `device`.
+
+    Float64 tensors are downcast to float32 before moving.
+
+    Parameters
+    ----------
+    object
+        A tensor, `None`, or a list/dict whose values are tensors or further
+        lists/dicts of tensors.
+    device
+        Target device.
+
+    Returns
+    -------
+    `object` with every contained tensor moved to `device`.
+    """
     # move single tensor to device
     if torch.is_tensor(object):
         if object.dtype == torch.float64:
@@ -45,13 +59,33 @@ def move_to(object: Union[Tensor, Dict, List, None], device: torch.device):
         raise TypeError("Invalid type for move_to")
 
 
-#-------------------------------------------------------------------------------
+# -------------------------------------------------------------------------------
 
 
 class WarmupCosineAnnealingLR(_LRScheduler):
     """
     Cosine annealing learning rate scheduler with linear warmup.
+
+    Parameters
+    ----------
+    optimizer
+        Optimizer whose learning rate is scheduled.
+    warmup_steps
+        Number of steps to linearly warm up the learning rate over.
+    total_steps
+        Total number of scheduled steps.
+    start_lr
+        Learning rate at step 0.
+    max_lr
+        Peak learning rate, reached at `warmup_steps`.
+    final_lr
+        Learning rate at `total_steps`, after cosine annealing from `max_lr`.
+    last_step
+        Index of the last step, for resuming; ``-1`` starts from scratch.
+    verbose
+        Passed through to `_LRScheduler`.
     """
+
     def __init__(
         self,
         optimizer: optim.Optimizer,
@@ -61,41 +95,63 @@ class WarmupCosineAnnealingLR(_LRScheduler):
         max_lr: float,
         final_lr: float = 0,
         last_step: int = -1,
-        verbose: bool = False
+        verbose: bool = False,
     ):
         self.warmup_steps = warmup_steps
         self.total_steps = total_steps
         self.max_lr = max_lr
         self.start_lr = start_lr
         self.final_lr = final_lr
-        super(WarmupCosineAnnealingLR, self).__init__(optimizer, last_step, verbose)
+        # NOTE: torch's _LRScheduler.__init__ signature has changed across versions
+        # (e.g. dropping/deprecating the positional `verbose` argument); this call
+        # may need updating to match the torch version actually installed.
+        super().__init__(optimizer, last_step, verbose)
 
     def get_lr(self):
+        """
+        Compute the current per-parameter-group learning rate.
+
+        Linearly warms up from `start_lr` to `max_lr` over `warmup_steps`, then
+        cosine-anneals from `max_lr` to `final_lr` over the remaining steps.
+
+        Returns
+        -------
+        List of learning rates, one per parameter group.
+        """
         if self._step_count <= self.warmup_steps:
             return [
-                self.start_lr + (self.max_lr - self.start_lr) *
-                (self._step_count) / self.warmup_steps for base_lr in self.base_lrs
+                self.start_lr + (self.max_lr - self.start_lr) * (self._step_count) / self.warmup_steps
+                for base_lr in self.base_lrs
             ]
         else:
             t = self._step_count - self.warmup_steps
             T = self.total_steps - self.warmup_steps
             return [
-                self.final_lr + (self.max_lr - self.final_lr) *
-                (1 + torch.cos(torch.tensor((t / T) * torch.pi)).item()) / 2
+                self.final_lr
+                + (self.max_lr - self.final_lr) * (1 + torch.cos(torch.tensor((t / T) * torch.pi)).item()) / 2
                 for base_lr in self.base_lrs
             ]
 
 
-#-------------------------------------------------------------------------------
+# -------------------------------------------------------------------------------
 
 
 class MixerTrainer(pl.LightningModule):
     """
     The lightning class for autoencoder based on MLP-Mixer.
+
+    Parameters
+    ----------
+    cfg
+        `TrainerConfig` (or compatible object) providing the optimizer/scheduler
+        hyperparameters.
+    mixer_model
+        The `MixerAutoencoder` (or compatible) model to train.
     """
+
     def __init__(self, cfg, mixer_model):
         super().__init__()
-        #self.save_hyperparameters()
+        # self.save_hyperparameters()
         self.mixer_model = mixer_model
 
         self.warmup_steps = cfg.warmup_steps
@@ -112,7 +168,7 @@ class MixerTrainer(pl.LightningModule):
         """
         self.optimizers(use_pl_optimizer=False).param_groups[0]["lr"]
         self.optimizers(use_pl_optimizer=False).param_groups[0]["weight_decay"]
-        self.optimizers().param_groups = (self.optimizers()._optimizer.param_groups)
+        self.optimizers().param_groups = self.optimizers()._optimizer.param_groups
 
     def on_train_batch_end(self, *_):
         """
@@ -123,7 +179,12 @@ class MixerTrainer(pl.LightningModule):
 
     def configure_optimizers(self):
         """
-        Configurate the optimizer and scheduler.
+        Configure the AdamW optimizer and `WarmupCosineAnnealingLR` scheduler.
+
+        Returns
+        -------
+        Dict with ``"optimizer"`` and ``"lr_scheduler"`` entries, as expected by
+        Lightning.
         """
         optimizer = optim.AdamW(
             params=self.parameters(),
@@ -144,15 +205,33 @@ class MixerTrainer(pl.LightningModule):
 
     def shared_step(self, batch: Tensor):
         """
-        Compute the loss in a shared forward pass.
+        Compute the reconstruction loss for a batch, shared across train/val/test.
+
+        Parameters
+        ----------
+        batch
+            Input batch tensor.
+
+        Returns
+        -------
+        Scalar MSE reconstruction loss.
         """
         targets = batch.squeeze().unsqueeze(-1)
         recons = self.mixer_model(targets)
-        return F.mse_loss(recons.squeeze(), targets.squeeze(), reduction='mean')
+        return F.mse_loss(recons.squeeze(), targets.squeeze(), reduction="mean")
 
     def training_step(self, batch: Tensor, _):
         """
-        Make one training step.
+        Make one training step and log the training loss.
+
+        Parameters
+        ----------
+        batch
+            Input batch tensor.
+
+        Returns
+        -------
+        Scalar training loss.
         """
         loss = self.shared_step(batch)
         self.log("loss/train", loss, prog_bar=True)
@@ -160,7 +239,16 @@ class MixerTrainer(pl.LightningModule):
 
     def validation_step(self, batch: Tensor, _):
         """
-        Make one validation step.
+        Make one validation step and log the validation loss.
+
+        Parameters
+        ----------
+        batch
+            Input batch tensor.
+
+        Returns
+        -------
+        Scalar validation loss.
         """
         loss = self.shared_step(batch)
         self.log("loss/valid", loss, prog_bar=True)
@@ -168,24 +256,51 @@ class MixerTrainer(pl.LightningModule):
 
     def test_step(self, batch: Tensor, _):
         """
-        Make one test step.
+        Make one test step and log the test loss.
+
+        Parameters
+        ----------
+        batch
+            Input batch tensor.
+
+        Returns
+        -------
+        Scalar test loss.
         """
         loss = self.shared_step(batch)
         self.log("loss/test", loss, prog_bar=True)
         return loss
 
 
-#-------------------------------------------------------------------------------
+# -------------------------------------------------------------------------------
 
 
 @dataclass
 class TrainerConfig:
-    '''
+    """
     The lightning trainer configuration class.
-    '''
+
+    Attributes
+    ----------
+    warmup_steps
+        Number of learning-rate warmup steps.
+    total_steps
+        Total number of scheduled training steps.
+    betas
+        AdamW `(beta1, beta2)` coefficients.
+    start_lr
+        Learning rate at step 0.
+    max_lr
+        Peak learning rate.
+    final_lr
+        Learning rate at `total_steps`.
+    weight_decay
+        AdamW weight decay.
+    """
+
     warmup_steps: int = 0
     total_steps: int = 0
-    betas: Tuple[float, float] = (0.9, 0.95)
+    betas: tuple[float, float] = (0.9, 0.95)
     start_lr: float = 0.0
     max_lr: float = 1e-4
     final_lr: float = 1e-5
@@ -193,10 +308,30 @@ class TrainerConfig:
 
     @classmethod
     def from_yaml(cls, file_path: str):
-        with open(file_path, 'r') as file:
+        """
+        Load a `TrainerConfig` from a YAML file.
+
+        Parameters
+        ----------
+        file_path
+            Path to a YAML file with keys matching this dataclass's fields.
+
+        Returns
+        -------
+        The loaded config.
+        """
+        with open(file_path) as file:
             config_data = yaml.safe_load(file)
             return cls(**config_data)
 
     def save_yaml(self, file_path: str):
-        with open(file_path, 'w') as file:
+        """
+        Save this config to a YAML file.
+
+        Parameters
+        ----------
+        file_path
+            Path the config is written to.
+        """
+        with open(file_path, "w") as file:
             yaml.safe_dump(self.__dict__, file)

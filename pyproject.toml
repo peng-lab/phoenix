@@ -16,12 +16,13 @@ authors = [
 ]
 requires-python = ">=3.11"
 classifiers = [
+  "License :: Other/Proprietary License",
   "Programming Language :: Python :: 3 :: Only",
   "Programming Language :: Python :: 3.11",
   "Programming Language :: Python :: 3.12",
   "Programming Language :: Python :: 3.13",
+  "Programming Language :: Python :: 3.14",
   "Typing :: Typed",
-  "License :: Other/Proprietary License",
 ]
 dependencies = [
   "anndata>=0.12.2",
@@ -34,19 +35,12 @@ dependencies = [
   # for debug logging (referenced from the issue template)
   "session-info2",
   "tqdm",
-  "zuko>=1.3.0",
+  "zuko>=1.3",
 ]
-
-# https://docs.pypi.org/project_metadata/#project-urls
-urls.Documentation = "https://phoenix.readthedocs.io/"
-urls.Homepage = "https://github.com/peng-lab/phoenix"
-urls.Source = "https://github.com/peng-lab/phoenix"
-
-[project.optional-dependencies]
 # Heavy compute stack used by the models/, trainers/, and h5py-backed datasets/ code.
 # Kept optional so a base install (e.g. for demo_plot/inference tooling) doesn't require
 # a working torch/CUDA setup.
-full = [
+optional-dependencies.full = [
   "h5py",
   "pytorch-lightning",
   "spatialdata",
@@ -56,17 +50,21 @@ full = [
   "vector-quantize-pytorch",
 ]
 # Nuclei segmentation pipeline (helpers/segmentor.py).
-segmentation = [
+optional-dependencies.segmentation = [
   "instanseg",
   "openslide-python",
   "scikit-image",
 ]
+# https://docs.pypi.org/project_metadata/#project-urls
+urls.Documentation = "https://phoenix.readthedocs.io/"
+urls.Homepage = "https://github.com/peng-lab/phoenix"
+urls.Source = "https://github.com/peng-lab/phoenix"
+
 # apex, flash-attn, and xformers (used by models/flow_llama3.py and models/mlp_mixer_ae.py
 # for the optimized transformer implementation) are intentionally NOT listed here: they
 # require a matching CUDA toolchain to build and are not reliably pip-installable. Install
 # them manually following their own instructions if you need the optimized model variant;
 # models/flow_simple.py provides a pure-torch equivalent that needs only the `full` extra.
-
 [dependency-groups]
 dev = [
   "twine>=4.0.2",
@@ -99,14 +97,14 @@ typecheck = [
 [tool.hatch]
 envs.default.installer = "uv"
 envs.default.dependency-groups = [ "dev" ]
-envs.docs.scripts.build = "sphinx-build -M html docs docs/_build -W {args}"
-envs.docs.scripts.clean = "git clean -fdX -- {args:docs}"
-envs.docs.scripts.open = "python -m webbrowser -t docs/_build/html/index.html"
-envs.docs.dependency-groups = [ "doc" ]
 # The `full` extra is needed so autosummary can actually import datasets/, models.flow_simple,
 # trainers/, and helpers/ for API doc generation (see docs/api.md for what's deliberately
 # excluded: apex/flash-attn/xformers-dependent modules, and segmentor.py pending `segmentation`).
 envs.docs.features = [ "full" ]
+envs.docs.scripts.build = "sphinx-build -M html docs docs/_build -W {args}"
+envs.docs.scripts.clean = "git clean -fdX -- {args:docs}"
+envs.docs.scripts.open = "python -m webbrowser -t docs/_build/html/index.html"
+envs.docs.dependency-groups = [ "doc" ]
 envs.hatch-test.matrix = [
   # Test the lowest and highest supported Python versions with normal deps
   { deps = [ "stable" ], python = [ "3.11", "3.12", "3.13" ] },
@@ -166,10 +164,10 @@ lint.ignore = [
 ]
 lint.per-file-ignores."*/__init__.py" = [ "F401" ]
 lint.per-file-ignores."docs/*" = [ "I" ]
-lint.per-file-ignores."tests/*" = [ "D" ]
 # TEMPORARY: the pre-existing src/phoenix/** modules don't have numpydoc-style docstrings yet.
 # Tracked for the follow-up conformance PR; remove this line once that lands.
 lint.per-file-ignores."src/phoenix/**" = [ "D" ]
+lint.per-file-ignores."tests/*" = [ "D" ]
 lint.pydocstyle.convention = "numpy"
 
 [tool.mypy]
@@ -180,18 +178,37 @@ files = [ "src", "tests" ]
 module = [
   "apex.*",
   "flash_attn.*",
+  "h5py.*",
   "instanseg.*",
   "openslide.*",
   "pytorch_lightning.*",
+  "scipy.*",
   "skimage.*",
   "sklearn.*",
   "spatialdata.*",
   "timm.*",
+  "torchvision.*",
+  "tqdm.*",
   "vector_quantize_pytorch.*",
   "xformers.*",
+  "yaml.*",
   "zuko.*",
 ]
 ignore_missing_imports = true
+
+[[tool.mypy.overrides]]
+# phoenix.models and phoenix.trainers make heavy use of dynamic torch module
+# construction (e.g. attaching submodules to a plain nn.Module() at runtime) and
+# implicit tensor-shape assumptions that a strict static check can't verify
+# without executing the model. Fully resolving that would require behavioral
+# changes to research code this migration can't validate at runtime (no GPU/test
+# harness here) -- scoped out rather than silently "fixed" by guessing. See the
+# PR description for the specific errors this was carved out for.
+module = [
+  "phoenix.models.*",
+  "phoenix.trainers.*",
+]
+ignore_errors = true
 
 [tool.pytest]
 addopts = [

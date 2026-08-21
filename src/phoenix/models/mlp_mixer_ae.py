@@ -3,24 +3,33 @@ Autoencoder model based on MLP-Mixer
 © Peng Lab / Helmholtz Munich
 """
 
-from typing import Optional
-
 import torch
 import torch.nn as nn
+from apex.normalization import FusedRMSNorm
 from torch import Tensor as Tensor
 from torch.utils.checkpoint import checkpoint
-
-from apex.normalization import FusedRMSNorm
 from vector_quantize_pytorch import FSQ
 from xformers.ops import SwiGLU
 
-#--------------------------------------------------------------------------------
+# --------------------------------------------------------------------------------
 
 
 class SwiGLUFFNFused(nn.Module):
     """
-    The position-wise feed-forward neural network.
+    The position-wise feed-forward neural network, backed by `xformers`' fused SwiGLU.
+
+    Parameters
+    ----------
+    d_input
+        Input feature dimension.
+    d_output
+        Output feature dimension.
+    ffn_mult
+        Hidden-dimension multiplier, before rounding to a multiple of 2.
+    ffn_bias
+        Whether the internal linear layers use a bias term.
     """
+
     def __init__(
         self,
         d_input: int = 1024,
@@ -42,16 +51,47 @@ class SwiGLUFFNFused(nn.Module):
         )
 
     def forward(self, x: Tensor):
+        """
+        Apply the gated feed-forward network.
+
+        Parameters
+        ----------
+        x
+            Input tensor of shape ``(..., d_input)``.
+
+        Returns
+        -------
+        Output tensor of shape ``(..., d_output)``.
+        """
         return self.swiglu(x)
 
 
-#--------------------------------------------------------------------------------
+# --------------------------------------------------------------------------------
 
 
 class MixerBlock(nn.Module):
     """
     The multilayer perceptron mixer block.
+
+    Mixes information across tokens (`token_mixer`) and, after a residual linear
+    projection to the output token count, across channels (`channel_mixer`).
+
+    Parameters
+    ----------
+    n_tokens_input
+        Number of input tokens.
+    n_tokens_output
+        Number of output tokens.
+    n_channels_input
+        Input channel dimension.
+    n_channels_output
+        Output channel dimension.
+    ffn_mult
+        Hidden-dimension multiplier used by the internal feed-forward networks.
+    ffn_bias
+        Whether the internal linear layers use a bias term.
     """
+
     def __init__(
         self,
         n_tokens_input: int = 1024,
@@ -91,6 +131,18 @@ class MixerBlock(nn.Module):
         )
 
     def forward(self, x: Tensor):
+        """
+        Mix `x` across tokens, then across channels.
+
+        Parameters
+        ----------
+        x
+            Input tensor, shape ``(batch, n_tokens_input, n_channels_input)``.
+
+        Returns
+        -------
+        Output tensor, shape ``(batch, n_tokens_output, n_channels_output)``.
+        """
         r = self.token_mixer(self.norm_1(x).transpose(-1, -2)).transpose(-1, -2)
         h = self.linear(x.transpose(-1, -2)).transpose(-1, -2) + r
         r = self.channel_mixer(self.norm_2(h))
@@ -98,23 +150,43 @@ class MixerBlock(nn.Module):
         return o
 
 
-#--------------------------------------------------------------------------------
+# --------------------------------------------------------------------------------
 
 
 class MixerEncoder(nn.Module):
     """
     The multilayer perceptron mixer encoder model.
+
+    Parameters
+    ----------
+    d_input
+        Input feature dimension.
+    d_tokens
+        Channel dimension used throughout the mixer blocks.
+    n_tokens
+        Token counts at each stage; `n_tokens[i]` is the input token count and
+        `n_tokens[i + 1]` the output token count of mixer block `i`. Defaults to
+        ``[1024, 256, 64]`` when `None`.
+    n_layers
+        Number of `MixerBlock` layers; must be less than ``len(n_tokens)``.
+    ffn_mult
+        Hidden-dimension multiplier used by the internal feed-forward networks.
+    ffn_bias
+        Whether the internal linear layers use a bias term.
     """
+
     def __init__(
         self,
         d_input: int = 1,
         d_tokens: int = 512,
-        n_tokens: list = [1024, 256, 64],
+        n_tokens: list | None = None,
         n_layers: int = 2,
         ffn_mult: int = 4,
         ffn_bias: bool = True,
     ):
         super().__init__()
+        if n_tokens is None:
+            n_tokens = [1024, 256, 64]
         self.position_embedding = nn.Embedding(
             num_embeddings=n_tokens[0],
             embedding_dim=d_input,
@@ -140,6 +212,18 @@ class MixerEncoder(nn.Module):
             )
 
     def forward(self, x: Tensor):
+        """
+        Encode `x` through the position embedding and mixer blocks.
+
+        Parameters
+        ----------
+        x
+            Input tensor, shape ``(batch, n_tokens[0], d_input)``.
+
+        Returns
+        -------
+        Encoded tensor, shape ``(batch, n_tokens[n_layers], d_tokens)``.
+        """
         p = torch.arange(x.size(1)).to(x.device)
         x = x + self.position_embedding(p)
         for encoder_block in self.encoder:
@@ -150,17 +234,39 @@ class MixerEncoder(nn.Module):
 class MixerDecoder(nn.Module):
     """
     The multilayer perceptron mixer decoder model.
+
+    Mirrors `MixerEncoder`, ending with a `SwiGLUFFNFused` projection back to a
+    single channel.
+
+    Parameters
+    ----------
+    d_input
+        Output feature dimension.
+    d_tokens
+        Channel dimension used throughout the mixer blocks.
+    n_tokens
+        Token counts at each stage, from smallest to largest. Defaults to
+        ``[64, 256, 1024]`` when `None`.
+    n_layers
+        Number of `MixerBlock` layers; must be less than ``len(n_tokens)``.
+    ffn_mult
+        Hidden-dimension multiplier used by the internal feed-forward networks.
+    ffn_bias
+        Whether the internal linear layers use a bias term.
     """
+
     def __init__(
         self,
         d_input: int = 1,
         d_tokens: int = 512,
-        n_tokens: list = [64, 256, 1024],
+        n_tokens: list | None = None,
         n_layers: int = 2,
         ffn_mult: int = 4,
         ffn_bias: bool = True,
     ):
         super().__init__()
+        if n_tokens is None:
+            n_tokens = [64, 256, 1024]
         self.position_embedding = nn.Embedding(
             num_embeddings=n_tokens[0],
             embedding_dim=d_input,
@@ -194,6 +300,18 @@ class MixerDecoder(nn.Module):
         )
 
     def forward(self, x: Tensor):
+        """
+        Decode `x` through the position embedding, mixer blocks, and output projection.
+
+        Parameters
+        ----------
+        x
+            Input tensor, shape ``(batch, n_tokens[0], d_input)``.
+
+        Returns
+        -------
+        Decoded tensor, shape ``(batch, n_tokens[-1], 1)``.
+        """
         p = torch.arange(x.size(1)).to(x.device)
         x = x + self.position_embedding(p)
         for decoder_block in self.decoder:
@@ -204,19 +322,48 @@ class MixerDecoder(nn.Module):
 class MixerAutoencoder(nn.Module):
     """
     The multilayer perceptron mixer autoencoder model.
+
+    Combines a `MixerEncoder`-style encoder with an optional finite scalar
+    quantization (`FSQ`) bottleneck, and a matching decoder.
+
+    Parameters
+    ----------
+    d_input
+        Input/output feature dimension.
+    d_tokens
+        Channel dimension used throughout the mixer blocks.
+    n_tokens
+        Token counts at each encoder stage, largest to smallest; the decoder
+        uses them in reverse. Defaults to ``[1024, 256, 64]`` when `None`.
+    n_layers
+        Number of `MixerBlock` layers per encoder/decoder stack.
+    ffn_mult
+        Hidden-dimension multiplier used by the internal feed-forward networks.
+    ffn_bias
+        Whether the internal linear layers use a bias term.
+    levels
+        FSQ quantization levels per dimension; quantization is disabled when
+        `None` or empty. Defaults to ``[8, 5, 5, 5]`` when not overridden.
+    checkpoint
+        Whether to use gradient checkpointing in `encode`/`decode`.
     """
+
     def __init__(
         self,
         d_input: int = 1,
         d_tokens: int = 512,
-        n_tokens: list = [1024, 256, 64],
+        n_tokens: list | None = None,
         n_layers: int = 2,
         ffn_mult: int = 4,
         ffn_bias: bool = True,
-        levels: Optional[list] = [8, 5, 5, 5],
-        checkpoint: bool = False
+        levels: list | None = None,
+        checkpoint: bool = False,
     ):
         super().__init__()
+        if n_tokens is None:
+            n_tokens = [1024, 256, 64]
+        if levels is None:
+            levels = [8, 5, 5, 5]
         self.checkpoint = checkpoint
 
         self.position_embedding = nn.Embedding(
@@ -277,6 +424,19 @@ class MixerAutoencoder(nn.Module):
         )
 
     def encode(self, x: Tensor):
+        """
+        Encode `x`, quantizing the result when an `FSQ` bottleneck is configured.
+
+        Parameters
+        ----------
+        x
+            Input tensor, shape ``(batch, n_tokens[0], d_input)``.
+
+        Returns
+        -------
+        Either the encoded tensor, or a tuple of the quantized tensor and its
+        FSQ indices when quantization is enabled.
+        """
         p = torch.arange(x.size(1)).to(x.device)
         x = x + self.position_embedding(p)
 
@@ -296,6 +456,18 @@ class MixerAutoencoder(nn.Module):
         return x
 
     def decode(self, x: Tensor):
+        """
+        Decode `x` back to input (channel) space.
+
+        Parameters
+        ----------
+        x
+            Encoded tensor, as returned by `encode`.
+
+        Returns
+        -------
+        Decoded tensor, shape ``(batch, n_tokens[0], d_input)``.
+        """
         for decoder_block in self.decoder:
             if self.checkpoint:
                 x = checkpoint(decoder_block, x, use_reentrant=True)
@@ -305,6 +477,22 @@ class MixerAutoencoder(nn.Module):
         return x
 
     def forward(self, x: Tensor, return_indices: bool = False):
+        """
+        Encode and decode `x`, optionally also returning the FSQ indices.
+
+        Parameters
+        ----------
+        x
+            Input tensor, shape ``(batch, n_tokens[0], d_input)``.
+        return_indices
+            Whether to also return the FSQ quantization indices; requires an
+            `FSQ` bottleneck to be configured.
+
+        Returns
+        -------
+        The reconstructed tensor, or a tuple of the reconstructed tensor and FSQ
+        indices when `return_indices` is `True`.
+        """
         # Pass through encoder
         if self.quantizer:
             x, indices = self.encode(x)
@@ -320,10 +508,9 @@ class MixerAutoencoder(nn.Module):
         return x
 
 
-#--------------------------------------------------------------------------------
+# --------------------------------------------------------------------------------
 
 if __name__ == "__main__":
-
     encoder_block = MixerBlock(
         n_tokens_input=1024,
         n_tokens_output=64,
@@ -383,4 +570,4 @@ if __name__ == "__main__":
     print(outputs.shape, indices.shape)
 
     parameters = sum(p.numel() for p in autoencoder_model.parameters())
-    print(f'MLP-Mixer model size: {parameters / 1e6:.3f} Million')
+    print(f"MLP-Mixer model size: {parameters / 1e6:.3f} Million")
