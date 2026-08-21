@@ -7,6 +7,7 @@ import numpy as np
 import torch
 import torch.nn as nn
 
+from typing import Optional
 from torch.utils.data import DataLoader
 from tqdm import tqdm
 from zuko.utils import odeint
@@ -39,7 +40,7 @@ class FlowPipeline:
     def __init__(
         self,
         model: nn.Module,
-        stats: dict = None,
+        stats: Optional[dict] = None,
         t_0: float = 0.0,
         t_1: float = 1.0,
         atol: float = 1e-1,

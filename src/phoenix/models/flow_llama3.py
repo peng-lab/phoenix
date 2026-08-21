@@ -94,7 +94,7 @@ class LabelEmbedder(nn.Module):
         self.num_classes = num_classes
         self.dropout_prob = dropout_prob
 
-    def token_drop(self, labels: Tensor, force_drop_ids: bool = None):
+    def token_drop(self, labels: Tensor, force_drop_ids: Optional[bool] = None):
         """
         Drops labels to enable classifier-free guidance.
         """
@@ -107,7 +107,7 @@ class LabelEmbedder(nn.Module):
         labels = torch.where(drop_ids, self.num_classes, labels)
         return labels
 
-    def forward(self, labels: Tensor, train: bool, force_drop_ids: bool = None):
+    def forward(self, labels: Tensor, train: bool, force_drop_ids: Optional[bool] = None):
         use_dropout = self.dropout_prob > 0
         if (train and use_dropout) or (force_drop_ids is not None):
             labels = self.token_drop(labels, force_drop_ids)
@@ -201,7 +201,7 @@ class FlashAttention(nn.Module):
         self.dropout = nn.Dropout(proj_drop)
 
     @torch.autocast(device_type='cuda', dtype=torch.bfloat16)
-    def forward(self, x: Tensor, c: Tensor = None):
+    def forward(self, x: Tensor, c: Optional[Tensor] = None):
         x_bsz, x_sql, _ = x.shape
         if c is not None:
             c_bsz, c_sql, _ = c.shape
@@ -342,7 +342,7 @@ class FlowTransformerBlock(nn.Module):
             ),
         )
 
-    def forward(self, x: Tensor, t: Tensor, c: Tensor = None):
+    def forward(self, x: Tensor, t: Tensor, c: Optional[Tensor] = None):
         shift_zattn, scale_zattn, gate_zattn = self.adaLN_1(t).chunk(3, dim=1)
         #shift_xattn, scale_xattn, gate_xattn = self.adaLN_2(t).chunk(3, dim=1)
         shift_mlp, scale_mlp, gate_mlp = self.adaLN_3(t).chunk(3, dim=1)
@@ -471,7 +471,7 @@ class FlowTransformerModel(nn.Module):
                 c = self.vision_model.forward_features(c)
         return c
 
-    def forward(self, x: Tensor, t: Tensor, c: Tensor = None, y: Tensor = None):
+    def forward(self, x: Tensor, t: Tensor, c: Optional[Tensor] = None, y: Optional[Tensor] = None):
         # extract or use pre-extracted image features
         if c.dim() == 4:
             c = self.vision_forward(c)
