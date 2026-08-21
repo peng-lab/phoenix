@@ -105,6 +105,12 @@ envs.docs.scripts.build = "sphinx-build -M html docs docs/_build -W {args}"
 envs.docs.scripts.clean = "git clean -fdX -- {args:docs}"
 envs.docs.scripts.open = "python -m webbrowser -t docs/_build/html/index.html"
 envs.docs.dependency-groups = [ "doc" ]
+# Install the `full` extra so CI actually exercises datasets/, models.flow_simple,
+# trainers/, and helpers/ instead of skipping every torch-dependent test. The
+# apex/flash-attn/xformers-only modules (flow_llama3, mlp_mixer_ae) and the
+# `segmentation` extra (segmentor.py) still skip -- see tests/test_imports.py
+# and tests/test_models.py for why.
+envs.hatch-test.features = [ "full" ]
 envs.hatch-test.matrix = [
   # Test the lowest and highest supported Python versions with normal deps
   { deps = [ "stable" ], python = [ "3.11", "3.12", "3.13" ] },
@@ -197,16 +203,15 @@ module = [
 ignore_missing_imports = true
 
 [[tool.mypy.overrides]]
-# phoenix.models and phoenix.trainers make heavy use of dynamic torch module
-# construction (e.g. attaching submodules to a plain nn.Module() at runtime) and
-# implicit tensor-shape assumptions that a strict static check can't verify
-# without executing the model. Fully resolving that would require behavioral
-# changes to research code this migration can't validate at runtime (no GPU/test
-# harness here) -- scoped out rather than silently "fixed" by guessing. See the
-# PR description for the specific errors this was carved out for.
+# phoenix.models makes heavy use of dynamic torch module construction (e.g.
+# attaching submodules to a plain nn.Module() at runtime) and implicit
+# tensor-shape assumptions that a strict static check can't verify without
+# executing the model. Fully resolving that would require behavioral changes to
+# research code this migration can't validate at runtime (no GPU/test harness
+# here) -- scoped out rather than silently "fixed" by guessing. See the PR
+# description for the specific errors this was carved out for.
 module = [
   "phoenix.models.*",
-  "phoenix.trainers.*",
 ]
 ignore_errors = true
 

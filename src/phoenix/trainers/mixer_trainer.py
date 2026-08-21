@@ -102,10 +102,11 @@ class WarmupCosineAnnealingLR(_LRScheduler):
         self.max_lr = max_lr
         self.start_lr = start_lr
         self.final_lr = final_lr
-        # NOTE: torch's _LRScheduler.__init__ signature has changed across versions
-        # (e.g. dropping/deprecating the positional `verbose` argument); this call
-        # may need updating to match the torch version actually installed.
-        super().__init__(optimizer, last_step, verbose)
+        self.verbose = verbose
+        # torch's _LRScheduler.__init__ no longer accepts `verbose` positionally
+        # (confirmed against torch 2.13: passing it raises TypeError). `verbose` is
+        # kept as a constructor argument for API stability but isn't forwarded.
+        super().__init__(optimizer, last_step)
 
     def get_lr(self):
         """
