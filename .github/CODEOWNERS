@@ -1,0 +1,5 @@
+# Both core maintainers are auto-requested as reviewers on every pull request.
+# This is routing only: the `main` ruleset does not set `require_code_owner_review`,
+# so a CODEOWNERS approval is not a separate merge requirement on top of the
+# single approving review it already asks for.
+* @rushin682 @manuel-tran
