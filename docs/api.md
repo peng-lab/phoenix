@@ -43,6 +43,8 @@ docstrings in the source for usage.
 
     trainers.mixer_trainer.MixerTrainer
     trainers.mixer_trainer.TrainerConfig
+    trainers.mixer_trainer.WarmupCosineAnnealingLR
+    trainers.mixer_trainer.move_to
 ```
 
 ## Helpers
@@ -59,6 +61,9 @@ docstrings in the source for usage.
     helpers.demo_plot.spatial_plot
     helpers.demo_plot.spatial_zarr_plot
     helpers.demo_plot.plot_gene
+    helpers.demo_plot.to_dense
+    helpers.demo_plot.norm01
+    helpers.demo_plot.set_active_layer
 ```
 
 `helpers.segmentor.NucleiPatchExtractor` depends on `openslide-python` and `instanseg` (the
