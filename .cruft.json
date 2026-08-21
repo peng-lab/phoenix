@@ -1,0 +1,44 @@
+{
+  "template": "https://github.com/scverse/cookiecutter-scverse",
+  "commit": "510f2db9dd06f9eb4fb3849bd17695d28d1507d5",
+  "checkout": null,
+  "context": {
+    "cookiecutter": {
+      "project_name": "phoenix",
+      "package_name": "phoenix",
+      "project_description": "Pan-cancer virtual spatial transcriptomics from routine histology",
+      "author_full_name": "Rushin Gindra",
+      "author_email": "rushin.gindra@helmholtz-munich.de",
+      "github_user": "peng-lab",
+      "github_repo": "phoenix",
+      "license": "MIT License",
+      "ide_integration": true,
+      "issue_categorization": "labels",
+      "_copy_without_render": [
+        ".github/workflows/build.yaml",
+        ".github/workflows/test.yaml",
+        "docs/_templates/autosummary/**.rst"
+      ],
+      "_exclude_on_template_update": [
+        "CHANGELOG.md",
+        "LICENSE",
+        "README.md",
+        "docs/api.md",
+        "docs/index.md",
+        "docs/notebooks/example.ipynb",
+        "docs/references.bib",
+        "docs/references.md",
+        "src/**",
+        "tests/**"
+      ],
+      "_render_devdocs": false,
+      "_jinja2_env_vars": {
+        "lstrip_blocks": true,
+        "trim_blocks": true
+      },
+      "_template": "https://github.com/scverse/cookiecutter-scverse",
+      "_commit": "510f2db9dd06f9eb4fb3849bd17695d28d1507d5"
+    }
+  },
+  "directory": null
+}
