@@ -1,22 +1,38 @@
 # Phoenix 🐦‍🔥
 ### Pan-cancer virtual spatial transcriptomics from routine histology with Phoenix
 
+[![Tests][badge-tests]][tests]
+[![Documentation][badge-docs]][documentation]
+
 [[preprint](https://doi.org/10.64898/2026.04.25.720812)] [[weights](https://huggingface.co/peng-lab/phoenix)] [[notebook](https://github.com/peng-lab/phoenix/blob/main/phoenix_demo.ipynb)]
 
 [![Open In Colab](https://colab.research.google.com/assets/colab-badge.svg)](https://github.com/peng-lab/phoenix/blob/main/phoenix_demo.ipynb)
 
 Phoenix is a (latent) flow matching generative model that predicts spatially resolved single-cell gene expression directly from routine H&E-stained histology images. It generalizes across cohorts, donors, organs, and tissues — enabling in silico analysis of tissue organization and treatment response at population scale.
 
-<img src="github/figure-1.jpg" width="800"/>
+<img src="https://raw.githubusercontent.com/peng-lab/phoenix/main/docs/_static/img/figure-1.jpg" width="800"/>
 
 <br>
 
-### Getting started
+## Getting started
 
-You can install Phoenix with the following command
+Please refer to the [documentation][], in particular, the [API documentation][].
+
+## Installation
+
+You need to have Python 3.11 or newer installed on your system.
+If you don't have Python installed, we recommend installing [uv][].
+
+We recommend managing dependencies in project-specific virtual environments to avoid dependency conflicts.
+This is most convenient using package managers such as [uv][].
+
+Install the latest development version:
+
+```bash
+pip install git+https://github.com/peng-lab/phoenix.git  # (or `uv add`)
 ```
-pip install git+https://github.com/peng-lab/phoenix
-```
+
+### Usage
 
 To load the 224x224 patches saved in an H5 file use
 ```python
@@ -24,7 +40,7 @@ import numpy as np
 from torch.utils.data import DataLoader
 from torchvision.transforms import v2
 from torchvision.transforms import InterpolationMode
-from github.datasets.h5py_dataset import H5PYDataset
+from phoenix.datasets.h5py_dataset import H5PYDataset
 
 gene_path = './xenium_human_multi.npy'
 gene_list = list(np.load(gene_path))
@@ -122,7 +138,7 @@ print("Output:", output.size())
 
 To predict gene expression from histology images use
 ```python
-from github.helpers.inference import FlowPipeline
+from phoenix.helpers.inference import FlowPipeline
 
 pipeline = FlowPipeline(
     model=flow_model,
@@ -136,7 +152,16 @@ pipeline = FlowPipeline(
 gex_pred, coords_list = pipeline(gene_list, dataloader)
 ```
 
-### Citation
+## Release notes
+
+See the [changelog][].
+
+## Contact
+
+For questions and help requests, you can reach out in the [scverse discourse][].
+If you found a bug, please use the [issue tracker][].
+
+## Citation
 
 In case you found our work useful, please consider citing us:
 ```
@@ -148,3 +173,13 @@ In case you found our work useful, please consider citing us:
 	doi = {https://doi.org/10.64898/2026.04.25.720812},
 }
 ```
+
+[uv]: https://github.com/astral-sh/uv
+[scverse discourse]: https://discourse.scverse.org/
+[issue tracker]: https://github.com/peng-lab/phoenix/issues
+[tests]: https://github.com/peng-lab/phoenix/actions/workflows/test.yaml
+[badge-tests]: https://img.shields.io/github/actions/workflow/status/peng-lab/phoenix/test.yaml?branch=main
+[badge-docs]: https://app.readthedocs.org/projects/phoenix/badge/
+[documentation]: https://phoenix.readthedocs.io
+[changelog]: https://phoenix.readthedocs.io/page/changelog.html
+[api documentation]: https://phoenix.readthedocs.io/page/api.html

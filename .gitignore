@@ -1,3 +1,23 @@
-__pycache__
+# Temp files
 .DS_Store
-*egg-info
+*~
+buck-out/
+
+# Compiled files
+.venv/
+uv.lock
+__pycache__/
+.*cache/
+*.egg-info/
+
+# Distribution / packaging
+/dist/
+
+# Tests and coverage
+/data/
+/node_modules/
+/.coverage*
+
+# docs
+/docs/generated/
+/docs/_build/
