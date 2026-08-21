@@ -103,6 +103,10 @@ envs.docs.scripts.build = "sphinx-build -M html docs docs/_build -W {args}"
 envs.docs.scripts.clean = "git clean -fdX -- {args:docs}"
 envs.docs.scripts.open = "python -m webbrowser -t docs/_build/html/index.html"
 envs.docs.dependency-groups = [ "doc" ]
+# The `full` extra is needed so autosummary can actually import datasets/, models.flow_simple,
+# trainers/, and helpers/ for API doc generation (see docs/api.md for what's deliberately
+# excluded: apex/flash-attn/xformers-dependent modules, and segmentor.py pending `segmentation`).
+envs.docs.features = [ "full" ]
 envs.hatch-test.matrix = [
   # Test the lowest and highest supported Python versions with normal deps
   { deps = [ "stable" ], python = [ "3.11", "3.12", "3.13" ] },
