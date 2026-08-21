@@ -14,10 +14,6 @@ Phoenix is a (latent) flow matching generative model that predicts spatially res
 
 <br>
 
-## Getting started
-
-Please refer to the [documentation][], in particular, the [API documentation][].
-
 ## Installation
 
 You need to have Python 3.11 or newer installed on your system.
@@ -158,8 +154,7 @@ See the [changelog][].
 
 ## Contact
 
-For questions and help requests, you can reach out in the [scverse discourse][].
-If you found a bug, please use the [issue tracker][].
+For questions, help requests, and bug reports, please use the [issue tracker][].
 
 ## Citation
 
@@ -174,12 +169,19 @@ In case you found our work useful, please consider citing us:
 }
 ```
 
+## License
+
+Phoenix is released under the [PolyForm Noncommercial License 1.0.0][license].
+
+Any noncommercial purpose is permitted, including academic research, personal study, and
+hobby projects. Commercial use requires a separate license — please get in touch.
+See the [full license text][license] for the exact terms.
+
 [uv]: https://github.com/astral-sh/uv
-[scverse discourse]: https://discourse.scverse.org/
+[license]: https://github.com/peng-lab/phoenix/blob/main/LICENSE
 [issue tracker]: https://github.com/peng-lab/phoenix/issues
 [tests]: https://github.com/peng-lab/phoenix/actions/workflows/test.yaml
 [badge-tests]: https://img.shields.io/github/actions/workflow/status/peng-lab/phoenix/test.yaml?branch=main
 [badge-docs]: https://app.readthedocs.org/projects/phoenix/badge/
 [documentation]: https://phoenix.readthedocs.io
 [changelog]: https://phoenix.readthedocs.io/page/changelog.html
-[api documentation]: https://phoenix.readthedocs.io/page/api.html
