@@ -87,3 +87,54 @@ def test_flow_pipeline_runs_on_cpu(pipeline_model):
     assert gex_pred.shape == (n_samples, n_genes)
     assert np.isfinite(gex_pred).all()
     assert sum(len(c) for c in coords_list) == n_samples
+
+
+def test_run_fast_flow_matches_run_flow(tiny_model):
+    """The K/V-caching sampler must produce the same output as run_flow."""
+    from phoenix.helpers.fast_sampler import run_fast_flow
+
+    torch.manual_seed(0)
+    x_0 = torch.randn(1, 6, 4)
+    c = torch.randn(1, 5, 16)
+
+    slow = run_flow(tiny_model, x_0, t_0=0.0, t_1=1.0, c=c, y=None, atol=1e-1, rtol=1e-1)
+    fast = run_fast_flow(tiny_model, x_0, t_0=0.0, t_1=1.0, c=c, y=None, atol=1e-1, rtol=1e-1)
+
+    torch.testing.assert_close(fast, slow)
+
+
+def test_optimized_flow_requires_prep(tiny_model):
+    from phoenix.helpers.fast_sampler import OptimizedFlow
+
+    opt = OptimizedFlow(tiny_model)
+    with pytest.raises(RuntimeError, match="prep"):
+        opt.velocity(0.5, torch.randn(1, 6, 4))
+
+
+def test_fast_attention_rejects_mismatched_kv_batch(tiny_model):
+    from phoenix.helpers.fast_sampler import OptimizedFlow
+
+    opt = OptimizedFlow(tiny_model)
+    opt.prep(torch.randn(1, 5, 16))
+    with pytest.raises(ValueError, match="batch"):
+        opt.velocity(0.5, torch.randn(2, 6, 4))
+
+
+def test_flow_pipeline_fast_runs_on_cpu(pipeline_model):
+    """FlowPipeline(fast=True) must run end-to-end without a GPU."""
+    from torch.utils.data import DataLoader, TensorDataset
+
+    torch.manual_seed(0)
+    n_samples, n_genes = 4, 3
+    feats = torch.randn(n_samples, 5, 16)
+    coords = torch.zeros(n_samples, 2)
+    loader = DataLoader(TensorDataset(feats, coords), batch_size=2)
+
+    stats = {"mean": np.zeros(n_genes), "std": np.ones(n_genes)}
+    pipeline = FlowPipeline(model=pipeline_model, stats=stats, atol=1e-1, rtol=1e-1, fast=True)
+
+    gex_pred, coords_list = pipeline(["A", "B", "C"], loader)
+
+    assert gex_pred.shape == (n_samples, n_genes)
+    assert np.isfinite(gex_pred).all()
+    assert sum(len(c) for c in coords_list) == n_samples
