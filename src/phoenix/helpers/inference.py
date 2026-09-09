@@ -11,6 +11,8 @@ from torch.utils.data import DataLoader
 from tqdm import tqdm
 from zuko.utils import odeint
 
+from phoenix.helpers.fast_sampler import run_fast_flow
+
 # -------------------------------------------------------------------------------
 
 
@@ -77,6 +79,9 @@ class FlowPipeline:
         Absolute tolerance passed to the ODE solver.
     rtol
         Relative tolerance passed to the ODE solver.
+    fast
+        Whether to sample with ``run_fast_flow``, which caches the conditioning
+        K/V projections across ODE steps, instead of ``run_flow``.
     """
 
     def __init__(
@@ -87,12 +92,14 @@ class FlowPipeline:
         t_1: float = 1.0,
         atol: float = 1e-1,
         rtol: float = 1e-1,
+        fast: bool = False,
     ):
         self.model = model
         self.t_0 = t_0
         self.t_1 = t_1
         self.atol = atol
         self.rtol = rtol
+        self.fast = fast
         if stats is None:
             raise ValueError("FlowPipeline requires `stats` with 'mean' and 'std' entries")
         self.mean, self.std = stats["mean"], stats["std"]
@@ -121,6 +128,7 @@ class FlowPipeline:
         """
         self.model.eval()
         device = self.device
+        sampler = run_fast_flow if self.fast else run_flow
 
         pred_list, coords_list = [], []
         for batch in tqdm(dataloader, desc="Flow sampling"):
@@ -131,7 +139,7 @@ class FlowPipeline:
             feats = self.model.vision_forward(image)  # type: ignore[operator]
             noise = torch.randn(image.size(0), len(gene_list), 1, device=device)
 
-            gex_pred = run_flow(
+            gex_pred = sampler(
                 flow_model=self.model,
                 x_0=noise.float(),
                 t_0=self.t_0,
