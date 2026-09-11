@@ -15,4 +15,5 @@
     "python.analysis.typeCheckingMode": "basic",
     "python.testing.pytestEnabled": true,
     "python.testing.pytestArgs": ["-vv", "--color=yes"],
+    "python.defaultInterpreterPath": "",
 }

@@ -64,8 +64,5 @@ docstrings in the source for usage.
     helpers.demo_plot.to_dense
     helpers.demo_plot.norm01
     helpers.demo_plot.set_active_layer
+    helpers.segmentor.NucleiPatchExtractor
 ```
-
-`helpers.segmentor.NucleiPatchExtractor` depends on `openslide-python` and `instanseg` (the
-`segmentation` extra), which are not yet installed in the docs build environment; it is omitted
-from the generated API reference for the same reason as above.

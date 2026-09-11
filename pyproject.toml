@@ -14,11 +14,10 @@ maintainers = [
 authors = [
   { name = "Rushin Gindra" },
 ]
-requires-python = ">=3.11"
+requires-python = ">=3.12"
 classifiers = [
   "License :: Other/Proprietary License",
   "Programming Language :: Python :: 3 :: Only",
-  "Programming Language :: Python :: 3.11",
   "Programming Language :: Python :: 3.12",
   "Programming Language :: Python :: 3.13",
   "Programming Language :: Python :: 3.14",
@@ -27,7 +26,9 @@ classifiers = [
 dependencies = [
   "anndata>=0.12.2",
   "matplotlib",
-  "numpy",
+  # numpy 2.x only: the spatialdata/zarr-3 stack resolves to numpy>=2 anyway, and NEP 50
+  # promotion semantics differ from 1.x, so a 1.x install would be a different numeric path.
+  "numpy>=2",
   "pillow",
   "pyyaml",
   "scipy",
@@ -42,17 +43,25 @@ dependencies = [
 optional-dependencies.full = [
   "h5py",
   "pytorch-lightning",
-  "spatialdata",
+  # SpatialDataset reads zarr v3 stores (v2 still reads). spatialdata gained zarr>=3 support and
+  # dropped the unmaintained xarray-schema (whose pkg_resources import broke against
+  # setuptools>=81); 0.8 is the first release we've verified end-to-end. It is Python >=3.12
+  # only, which is part of why requires-python is 3.12.
+  "spatialdata>=0.8",
+  # Nuclei segmentation (helpers/segmentor.py). The sibling repo's `segmentation` extra brings
+  # instanseg-torch (the maintained InstanSeg; the PyPI project literally named `instanseg` is a dead
+  # 0.0.2 release that pins numpy<2 and broke `uv sync`), scikit-image, openslide-python + openslide-bin.
+  # Not on PyPI, hence the git reference; tracks main by decision (a spatialrefinery push can change
+  # the resolved environment -- pin a rev here if a release needs freezing).
+  "spatialrefinery[segmentation] @ git+https://github.com/peng-lab/spatialrefinery.git@main",
   "timm",
   "torch",
   "torchvision",
   "vector-quantize-pytorch",
-]
-# Nuclei segmentation pipeline (helpers/segmentor.py).
-optional-dependencies.segmentation = [
-  "instanseg",
-  "openslide-python",
-  "scikit-image",
+  # Explicit floor: we target the zarr v3 on-disk format (v2 stores still read). Redundant with
+  # spatialdata>=0.8's own zarr>=3 pin, but stated unmarked so pinning an older spatialdata
+  # conflicts loudly here instead of silently resolving back to zarr-python 2.
+  "zarr>=3",
 ]
 # https://docs.pypi.org/project_metadata/#project-urls
 urls.Documentation = "https://phoenix.readthedocs.io/"
@@ -94,25 +103,28 @@ typecheck = [
 ]
 
 [tool.hatch]
+# Required for the spatialrefinery git reference in the `full` extra; hatchling refuses to build
+# metadata containing direct references otherwise. This also means the built wheel is not
+# uploadable to PyPI (which forbids direct references) -- phoenix is installed from git, not PyPI.
+metadata.allow-direct-references = true
 envs.default.installer = "uv"
 envs.default.dependency-groups = [ "dev" ]
 # The `full` extra is needed so autosummary can actually import datasets/, models.flow_simple,
 # trainers/, and helpers/ for API doc generation (see docs/api.md for what's deliberately
-# excluded: apex/flash-attn/xformers-dependent modules, and segmentor.py pending `segmentation`).
+# excluded: the apex/flash-attn/xformers-dependent modules).
 envs.docs.features = [ "full" ]
 envs.docs.scripts.build = "sphinx-build -M html docs docs/_build -W {args}"
 envs.docs.scripts.clean = "git clean -fdX -- {args:docs}"
 envs.docs.scripts.open = "python -m webbrowser -t docs/_build/html/index.html"
 envs.docs.dependency-groups = [ "doc" ]
 # Install the `full` extra so CI actually exercises datasets/, models.flow_simple,
-# trainers/, and helpers/ instead of skipping every torch-dependent test. The
-# apex/flash-attn/xformers-only modules (flow_llama3, mlp_mixer_ae) and the
-# `segmentation` extra (segmentor.py) still skip -- see tests/test_imports.py
-# and tests/test_models.py for why.
+# trainers/, and helpers/ (segmentor.py included) instead of skipping every
+# torch-dependent test. The apex/flash-attn/xformers-only modules (flow_llama3,
+# mlp_mixer_ae) still skip -- see tests/test_imports.py and tests/test_models.py for why.
 envs.hatch-test.features = [ "full" ]
 envs.hatch-test.matrix = [
   # Test the lowest and highest supported Python versions with normal deps
-  { deps = [ "stable" ], python = [ "3.11", "3.12", "3.13" ] },
+  { deps = [ "stable" ], python = [ "3.12", "3.13" ] },
   # Test the newest supported Python version also with pre-release deps
   { deps = [ "pre" ], python = [ "3.13" ] },
 ]
