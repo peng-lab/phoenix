@@ -75,7 +75,6 @@ def test_flow_pipeline_runs_on_cpu(pipeline_model):
     n_samples, n_genes = 4, 3
     feats = torch.randn(n_samples, 5, 16)
     coords = torch.zeros(n_samples, 2)
-    # batch_size=1 would let the squeeze() inside __call__ collapse the batch dim
     loader = DataLoader(TensorDataset(feats, coords), batch_size=2)
 
     stats = {"mean": np.zeros(n_genes), "std": np.ones(n_genes)}
@@ -87,6 +86,25 @@ def test_flow_pipeline_runs_on_cpu(pipeline_model):
     assert gex_pred.shape == (n_samples, n_genes)
     assert np.isfinite(gex_pred).all()
     assert sum(len(c) for c in coords_list) == n_samples
+
+
+def test_flow_pipeline_handles_batch_size_one(pipeline_model):
+    """A batch of one must keep its batch dim: `__call__` squeezes only the trailing gene-token dim."""
+    from torch.utils.data import DataLoader, TensorDataset
+
+    torch.manual_seed(0)
+    n_samples, n_genes = 3, 2
+    feats = torch.randn(n_samples, 5, 16)
+    coords = torch.zeros(n_samples, 2)
+    loader = DataLoader(TensorDataset(feats, coords), batch_size=1)
+
+    stats = {"mean": np.zeros(n_genes), "std": np.ones(n_genes)}
+    pipeline = FlowPipeline(model=pipeline_model, stats=stats, atol=1e-1, rtol=1e-1)
+
+    gex_pred, coords_list = pipeline(["A", "B"], loader)
+
+    assert gex_pred.shape == (n_samples, n_genes)
+    assert len(coords_list) == n_samples
 
 
 def test_run_fast_flow_matches_run_flow(tiny_model):

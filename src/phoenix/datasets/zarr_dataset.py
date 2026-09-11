@@ -4,6 +4,8 @@ Spatial transcriptomics dataset based on SpatialData.
 © Peng Lab / Helmholtz Munich
 """
 
+from pathlib import Path
+
 import numpy as np
 import spatialdata as sd
 import torch
@@ -28,7 +30,8 @@ class SpatialDataset(Dataset):
     Parameters
     ----------
     zarr_path
-        Path to a SpatialData ``.zarr`` store.
+        Path to a SpatialData ``.zarr`` store, or an already-read ``SpatialData``
+        object (e.g. from ``sd.read_zarr(path, selection=...)``) used as is.
     table_type
         Key of the anndata table to read from the store (used when `adata_transform`
         is not given).
@@ -48,7 +51,7 @@ class SpatialDataset(Dataset):
 
     def __init__(
         self,
-        zarr_path: str,
+        zarr_path: str | Path | sd.SpatialData,
         table_type: str,
         gene_list: list,
         patch_size: int = 224,
@@ -56,8 +59,8 @@ class SpatialDataset(Dataset):
         adata_transform: Compose | None = None,
         image_transform: Compose | None = None,
     ):
-        # read zarr file with spatialdata
-        self.sdata = sd.read_zarr(zarr_path)
+        # read zarr file with spatialdata, unless an already-read store is given
+        self.sdata = zarr_path if isinstance(zarr_path, sd.SpatialData) else sd.read_zarr(zarr_path)
 
         if adata_transform:
             adata = self.sdata[table_type]
