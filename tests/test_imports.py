@@ -12,6 +12,7 @@ import pytest
         ("phoenix.datasets.zarr_dataset", ["spatialdata"]),
         ("phoenix.helpers.demo_plot", []),
         ("phoenix.helpers.inference", []),
+        ("phoenix.helpers.segmentor", ["openslide", "instanseg", "skimage"]),
         ("phoenix.models.flow_simple", []),
         ("phoenix.trainers.mixer_trainer", ["pytorch_lightning"]),
     ],
@@ -29,14 +30,13 @@ def test_importable_with_full_extra(module_name, extra_deps):
     [
         ("phoenix.models.flow_llama3", ["apex", "flash_attn", "xformers"]),
         ("phoenix.models.mlp_mixer_ae", ["apex", "xformers", "vector_quantize_pytorch"]),
-        ("phoenix.helpers.segmentor", ["openslide", "instanseg", "skimage"]),
     ],
 )
 def test_importable_with_optional_extras(module_name, required):
     """
     These modules need packages that are deliberately not part of any pip extra
-    (apex/flash-attn/xformers) or belong to the `segmentation` extra; skipped
-    whenever they aren't present, which is the expected default CI environment.
+    (apex/flash-attn/xformers); skipped whenever they aren't present, which is the
+    expected default CI environment.
     """
     for dep in required:
         pytest.importorskip(dep)
