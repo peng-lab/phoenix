@@ -14,11 +14,10 @@ maintainers = [
 authors = [
   { name = "Rushin Gindra" },
 ]
-requires-python = ">=3.11"
+requires-python = ">=3.12"
 classifiers = [
   "License :: Other/Proprietary License",
   "Programming Language :: Python :: 3 :: Only",
-  "Programming Language :: Python :: 3.11",
   "Programming Language :: Python :: 3.12",
   "Programming Language :: Python :: 3.13",
   "Programming Language :: Python :: 3.14",
@@ -27,7 +26,9 @@ classifiers = [
 dependencies = [
   "anndata>=0.12.2",
   "matplotlib",
-  "numpy",
+  # numpy 2.x only: the spatialdata/zarr-3 stack resolves to numpy>=2 anyway, and NEP 50
+  # promotion semantics differ from 1.x, so a 1.x install would be a different numeric path.
+  "numpy>=2",
   "pillow",
   "pyyaml",
   "scipy",
@@ -42,11 +43,19 @@ dependencies = [
 optional-dependencies.full = [
   "h5py",
   "pytorch-lightning",
-  "spatialdata",
+  # SpatialDataset reads zarr v3 stores (v2 still reads). spatialdata gained zarr>=3 support and
+  # dropped the unmaintained xarray-schema (whose pkg_resources import broke against
+  # setuptools>=81); 0.8 is the first release we've verified end-to-end. It is Python >=3.12
+  # only, which is part of why requires-python is 3.12.
+  "spatialdata>=0.8",
   "timm",
   "torch",
   "torchvision",
   "vector-quantize-pytorch",
+  # Explicit floor: we target the zarr v3 on-disk format (v2 stores still read). Redundant with
+  # spatialdata>=0.8's own zarr>=3 pin, but stated unmarked so pinning an older spatialdata
+  # conflicts loudly here instead of silently resolving back to zarr-python 2.
+  "zarr>=3",
 ]
 # Nuclei segmentation pipeline (helpers/segmentor.py).
 optional-dependencies.segmentation = [
@@ -112,7 +121,7 @@ envs.docs.dependency-groups = [ "doc" ]
 envs.hatch-test.features = [ "full" ]
 envs.hatch-test.matrix = [
   # Test the lowest and highest supported Python versions with normal deps
-  { deps = [ "stable" ], python = [ "3.11", "3.12", "3.13" ] },
+  { deps = [ "stable" ], python = [ "3.12", "3.13" ] },
   # Test the newest supported Python version also with pre-release deps
   { deps = [ "pre" ], python = [ "3.13" ] },
 ]
