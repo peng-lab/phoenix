@@ -72,7 +72,8 @@ def make_synthetic_store(
         },
         index=np.arange(n_cells).astype(str),
     )
-    adata = ad.AnnData(X=counts, obs=obs, var=pd.DataFrame(index=genes), obsm={"spatial": xy})
+    adata = ad.AnnData(X=counts, obs=obs, var=pd.DataFrame(index=genes))
+    adata.obsm["spatial"] = xy
     table = TableModel.parse(adata, region="nucleus_boundaries", region_key="region", instance_key="instance_id")
 
     sdata = sd.SpatialData(
