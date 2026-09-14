@@ -151,7 +151,7 @@ class FlowPipeline:
                 device=device,
             )
 
-            gex_pred = gex_pred.float().squeeze().detach().cpu().numpy()
+            gex_pred = gex_pred.float().squeeze(-1).detach().cpu().numpy()
             pred_list.append(gex_pred)
             coords_list.append(coords)
 
