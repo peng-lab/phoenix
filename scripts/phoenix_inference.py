@@ -104,43 +104,6 @@ VISION_MODEL = "vit_giant_patch14_reg4_dinov2"
 # returns a store with *no* tables rather than raising.
 READ_SELECTION = ("images", "shapes", "tables")
 
-
-def _remove_orphaned_element(zarr_path: str | Path, element_type: str, element_name: str) -> None:
-    """
-    Remove `element_name` from disk if it exists but is absent from the store's consolidated metadata.
-
-    `sd.read_zarr` and `SpatialData.elements_paths_on_disk` both discover elements through the store's
-    *consolidated* metadata, which `write_element` only updates *after* a write finishes
-    (`spatialdata/_core/spatialdata.py`: `if self.has_consolidated_metadata(): self.write_consolidated_metadata()`).
-    A write interrupted before that point -- a crash, an OOM kill, or a job hitting its wall clock --
-    leaves a group on disk that is invisible to both of those, so the normal `pred_key in sdata.tables`
-    check reports "absent" while the *next* `write_element` call fails with "the Zarr store already
-    exists. Use overwrite=True", because that check walks the raw store, not consolidated metadata.
-    Detected here the same way, by opening with `use_consolidated=False`, and removed outright: a group
-    in this state was never a complete, readable table, so there is nothing to preserve.
-
-    Parameters
-    ----------
-    zarr_path
-        Path to the SpatialData zarr store.
-    element_type
-        Top-level group the element lives under, e.g. ``"tables"``.
-    element_name
-        Name of the element to check for and remove.
-    """
-    root = zarr.open_group(str(zarr_path), mode="r", use_consolidated=False)
-    if element_type not in root or element_name not in root[element_type]:
-        return
-    stale_path = Path(zarr_path) / element_type / element_name
-    logger.warning(
-        "removing orphaned '%s/%s', left on disk by a previous write that never completed: %s",
-        element_type,
-        element_name,
-        stale_path,
-    )
-    shutil.rmtree(stale_path)
-
-
 def load_model(weights: str | Path, device: str | torch.device) -> FlowTransformerModel:
     """
     Build the flow transformer with its frozen vision encoder and load the published weights.
@@ -258,12 +221,6 @@ def predict_slide(
     if replacing and not overwrite:
         logger.info("%s: '%s' already present, skipping", name, pred_key)
         return None
-
-    if not replacing:
-        # A `pred_key` that is genuinely absent from both the store and its consolidated metadata is
-        # the common case and this is a no-op; see the function's docstring for the crash-recovery
-        # case it actually guards against.
-        _remove_orphaned_element(zarr_path, "tables", pred_key)
 
     dataset = SpatialDataset(
         zarr_path=sdata,
