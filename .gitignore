@@ -24,5 +24,7 @@ __pycache__/
 
 # local scratch
 /graphify-out/
-/scripts/
+/experimental/
+/slurm_logs/
 CLAUDE.md
+.claude/worktrees/
