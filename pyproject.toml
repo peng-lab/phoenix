@@ -55,8 +55,12 @@ optional-dependencies.full = [
   # the resolved environment -- pin a rev here if a release needs freezing).
   "spatialrefinery[segmentation] @ git+https://github.com/peng-lab/spatialrefinery.git@main",
   "timm",
-  "torch",
-  "torchvision",
+  # Pinned, not floating: the optimized variant (see below) needs flash-attn, and the newest
+  # CUDA 13 flash-attn build on the Astral GPU index (https://wheels.astral.sh/simple/cu130/) is
+  # `+cu.13.0.torch.2.12`, which declares `torch ==2.12.*` -- there is no torch 2.13 build.
+  # torchvision hard-pins its exact torch release, so 0.27.1 is the matching one for torch 2.12.1.
+  "torch==2.12.1",
+  "torchvision==0.27.1",
   "vector-quantize-pytorch",
   # Explicit floor: we target the zarr v3 on-disk format (v2 stores still read). Redundant with
   # spatialdata>=0.8's own zarr>=3 pin, but stated unmarked so pinning an older spatialdata
@@ -68,10 +72,12 @@ urls.Documentation = "https://phoenix.readthedocs.io/"
 urls.Homepage = "https://github.com/peng-lab/phoenix"
 urls.Source = "https://github.com/peng-lab/phoenix"
 
-# apex, flash-attn, and xformers (used by models/flow_llama3.py and models/mlp_mixer_ae.py
-# for the optimized transformer implementation) are intentionally NOT listed here: they
-# require a matching CUDA toolchain to build and are not reliably pip-installable. Install
-# them manually following their own instructions if you need the optimized model variant;
+# apex, flash-attn, and xformers (used by models/flow_llama3.py and models/mlp_mixer_ae.py for the
+# optimized transformer implementation) are intentionally NOT listed here. flash-attn and xformers
+# do have prebuilt wheels now (Astral's GPU index and PyPI respectively, both linux x86_64 / sm_80+
+# only), but adding them to `full` would break CPU and macOS installs of an otherwise
+# platform-neutral extra. apex has no wheel index at all and must be built from source against the
+# installed torch. See README.md's "Optimized model variant" section for the install sequence;
 # models/flow_simple.py provides a pure-torch equivalent that needs only the `full` extra.
 [dependency-groups]
 dev = [

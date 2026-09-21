@@ -56,10 +56,10 @@ def test_flow_transformer_model_requires_conditioning():
 
 
 # ---------------------------------------------------------------------------
-# Optimized variants: need apex/flash-attn/xformers, which are deliberately not
-# pip-installable (see pyproject.toml), plus flash-attn specifically requires a
-# CUDA runtime. These are skipped in any environment lacking that stack -- which
-# is the expected default -- but will run wherever it's actually available.
+# Optimized variants: need apex/flash-attn/xformers, which are deliberately not part of any pip
+# extra (see pyproject.toml and README.md's "Optimized model variant" section), plus flash-attn
+# specifically requires a CUDA runtime. These are skipped in any environment lacking that stack --
+# which is the expected default -- but will run wherever it's actually available.
 # ---------------------------------------------------------------------------
 
 
