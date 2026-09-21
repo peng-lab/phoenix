@@ -35,8 +35,9 @@ def test_importable_with_full_extra(module_name, extra_deps):
 def test_importable_with_optional_extras(module_name, required):
     """
     These modules need packages that are deliberately not part of any pip extra
-    (apex/flash-attn/xformers); skipped whenever they aren't present, which is the
-    expected default CI environment.
+    (apex/flash-attn/xformers; see README.md's "Optimized model variant" section for how to
+    install them); skipped whenever they aren't present, which is the expected default CI
+    environment.
     """
     for dep in required:
         pytest.importorskip(dep)

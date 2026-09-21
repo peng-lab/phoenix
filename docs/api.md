@@ -27,9 +27,11 @@
 ```
 
 `models.flow_llama3` and `models.mlp_mixer_ae` provide optimized variants of the same
-architecture built on `apex`, `flash-attn`, and `xformers`. Those packages require a matching
-CUDA toolchain and are not pip-installable, so the modules cannot be imported in the docs build
-environment and are intentionally left out of the generated API reference here; see their
+architecture built on `apex`, `flash-attn`, and `xformers`. `flash-attn` and `xformers` have
+prebuilt wheels (see README.md's "Optimized model variant" section) but are platform-specific
+(linux x86_64, sm_80+ GPU) and are not part of the docs build environment; `apex` has no wheel
+index at all and must be built from source against the installed torch. The modules cannot be
+imported here and are intentionally left out of the generated API reference; see their
 docstrings in the source for usage.
 
 ## Trainers

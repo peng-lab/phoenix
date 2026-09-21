@@ -28,6 +28,69 @@ Install the latest development version:
 pip install git+https://github.com/peng-lab/phoenix.git  # (or `uv add`)
 ```
 
+### Optimized model variant (H100 / CUDA 13)
+
+`phoenix.models.flow_llama3` and `phoenix.models.mlp_mixer_ae` are optimized reimplementations of
+the flow transformer and the latent autoencoder, built on `apex`, `flash-attn` and `xformers` fused
+kernels. `phoenix.models.flow_simple` is a pure-torch equivalent that needs none of this and is what
+the `full` extra alone gives you — use it unless you specifically need the optimized variant's speed.
+
+Requirements: Linux x86_64, Python 3.12–3.14, a CUDA 13.0 toolkit (`nvcc`) to build `apex`, and a GPU
+of compute capability sm_80 or newer (A100/H100/H200) — the published `flash-attn` wheels carry no
+kernels for older GPUs (e.g. sm_75), so this stack imports but cannot run on those.
+
+```bash
+git clone https://github.com/peng-lab/phoenix.git && cd phoenix
+uv sync --extra full          # installs torch==2.12.1 / torchvision==0.27.1, pinned to match
+                               # the flash-attn build below -- there is no CUDA-13 flash-attn
+                               # wheel for torch 2.13 yet
+
+uv pip install --index https://wheels.astral.sh/simple/cu130/ \
+    "flash-attn==2.8.3.post1+cu.13.0.torch.2.12"
+
+uv pip install "xformers>=0.0.35"
+```
+
+`apex` has no wheel index and must be built from source against the torch just installed, since its
+`fused_layer_norm_cuda` extension (used by `apex.normalization.FusedRMSNorm`) links torch's ABI:
+
+```bash
+git clone https://github.com/NVIDIA/apex.git && cd apex
+uv pip install ninja
+
+# TORCH_CUDA_ARCH_LIST must match your target GPU's compute capability (9.0 for H100). Leaving it
+# unset lets torch auto-detect the *build* host's GPU, which silently produces a wheel that only
+# runs there.
+TORCH_CUDA_ARCH_LIST="9.0" APEX_CPP_EXT=1 APEX_CUDA_EXT=1 \
+    uv build --wheel --no-build-isolation -o /path/to/wheel/output .
+
+uv pip install /path/to/wheel/output/apex-0.1-*.whl
+```
+
+On a SLURM cluster, run the build step above as a batch job submitted from a node with the target
+GPU (compute nodes commonly have no internet access, so `git clone` and `uv pip install ninja`
+above must run on a login/head node first).
+
+> [!WARNING]
+> `uv sync` removes packages that aren't declared in `pyproject.toml`. Once `flash-attn`, `xformers`
+> and `apex` are installed on top of `uv sync --extra full`, every *later* sync must add `--inexact`
+> (`uv sync --extra full --inexact`), or it will silently uninstall all three again.
+
+Verify the install:
+
+```bash
+python -c "
+import torch, flash_attn, xformers
+from apex.normalization import FusedRMSNorm
+from flash_attn import flash_attn_func
+from xformers.ops import SwiGLU
+print(torch.__version__, torch.version.cuda)
+"
+```
+
+`flash-attn`'s kernels only run on an sm_80+ device, so the import above succeeds anywhere but the
+forward pass itself must be run on the target GPU.
+
 ### Usage
 
 To load the 224x224 patches saved in an H5 file use
