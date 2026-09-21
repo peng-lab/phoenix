@@ -24,5 +24,8 @@ __pycache__/
 
 # local scratch
 /graphify-out/
-/scripts/
 CLAUDE.md
+
+# site-specific SLURM orchestration -- not portable, kept out of the GitHub repo
+/scripts/*.sbatch
+/scripts/*.sh
