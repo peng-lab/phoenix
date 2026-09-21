@@ -41,8 +41,8 @@ optional-dependencies.full = [
   "spatialdata>=0.8",
   "spatialrefinery[segmentation] @ git+https://github.com/peng-lab/spatialrefinery.git@main",
   "timm",
-  "torch==2.12.1", # pinned since we use flash-attn-2 with CUDA 13 (See README)
-  "torchvision==0.27.1", # pinned since torch=2.12.1
+  "torch==2.12.1",                                                                            # pinned since we use flash-attn-2 with CUDA 13 (See README)
+  "torchvision==0.27.1",                                                                      # pinned since torch=2.12.1
   "vector-quantize-pytorch",
   "zarr>=3",
 ]
