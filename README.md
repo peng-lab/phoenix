@@ -35,7 +35,8 @@ the flow transformer and the latent autoencoder, built on `apex`, `flash-attn` a
 kernels. `phoenix.models.flow_simple` is a pure-torch equivalent that needs none of this and is what
 the `full` extra alone gives you — use it unless you specifically need the optimized variant's speed.
 
-Requirements: Linux x86_64, Python 3.12–3.14, a CUDA 13.0 toolkit (`nvcc`) to build `apex`, and a GPU
+Requirements: Linux x86_64, Python 3.12–3.14, a CUDA 13.0 toolkit (`nvcc`) to build `apex` and
+`xformers`, and a GPU
 of compute capability sm_80 or newer (A100/H100/H200) — the published `flash-attn` wheels carry no
 kernels for older GPUs (e.g. sm_75), so this stack imports but cannot run on those.
 
@@ -47,8 +48,6 @@ uv sync --extra full          # installs torch==2.12.1 / torchvision==0.27.1, pi
 
 uv pip install --index https://wheels.astral.sh/simple/cu130/ \
     "flash-attn==2.8.3.post1+cu.13.0.torch.2.12"
-
-uv pip install "xformers>=0.0.35"
 ```
 
 `apex` has no wheel index and must be built from source against the torch just installed, since its
@@ -67,9 +66,29 @@ TORCH_CUDA_ARCH_LIST="9.0" APEX_CPP_EXT=1 APEX_CUDA_EXT=1 \
 uv pip install /path/to/wheel/output/apex-0.1-*.whl
 ```
 
-On a SLURM cluster, run the build step above as a batch job submitted from a node with the target
+The published `xformers` wheel (`uv pip install xformers`) is prebuilt for a fixed torch/CUDA/Python
+combination and quietly falls back to it: install it against a mismatched combo and it still imports,
+but ops like `xformers.ops.SwiGLU` silently run their eager PyTorch fallback instead of the fused
+kernel. Build it from source instead, pinned to sm_90 the same way as `apex` above:
+
+```bash
+git clone --recursive https://github.com/facebookresearch/xformers.git && cd xformers
+uv pip install ninja
+
+TORCH_CUDA_ARCH_LIST="9.0" \
+    uv build --wheel --no-build-isolation -o /path/to/wheel/output .
+
+uv pip install /path/to/wheel/output/xformers-*.whl
+```
+
+`--recursive` matters here: `xformers` vendors `cutlass` and `flash-attention` as git submodules and
+its `setup.py` needs them checked out to build the CUDA extensions.
+
+On a SLURM cluster, run the build steps above as a batch job submitted from a node with the target
 GPU (compute nodes commonly have no internet access, so `git clone` and `uv pip install ninja`
-above must run on a login/head node first).
+above must run on a login/head node first). `nvcc` cross-compiles for whatever `TORCH_CUDA_ARCH_LIST`
+says, so the build itself does not need the target GPU physically present -- only a matching CUDA
+toolkit -- but keep to the same split anyway if the build node has no internet.
 
 > [!WARNING]
 > `uv sync` removes packages that aren't declared in `pyproject.toml`. Once `flash-attn`, `xformers`
