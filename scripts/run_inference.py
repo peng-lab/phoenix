@@ -256,6 +256,15 @@ def predict_slide(
         image_transform=IMAGE_TRANSFORM,
         adata_transform=None,
     )
+    # a wrong native pixel size silently changes the patch's field of view; make it visible in the logs
+    crop_px = int(patch_size * target_mpp / dataset.native_mpp)
+    logger.info(
+        "%s: native pixel size %.4f um/px, %d px crop covers %.1f um",
+        name,
+        dataset.native_mpp,
+        crop_px,
+        crop_px * dataset.native_mpp,
+    )
     # `shuffle=False` is load-bearing, not a default: cells are matched to predictions by row
     # position alone -- there is no cell-id join anywhere downstream.
     dataloader = DataLoader(

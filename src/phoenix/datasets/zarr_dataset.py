@@ -4,6 +4,7 @@ Spatial transcriptomics dataset based on SpatialData.
 © Peng Lab / Helmholtz Munich
 """
 
+import warnings
 from pathlib import Path
 
 import numpy as np
@@ -47,6 +48,10 @@ class SpatialDataset(Dataset):
         in place of the default `get_adata` extraction.
     image_transform
         Optional torchvision-style transform applied to each extracted image patch.
+    native_mpp
+        Pixel size of the H&E image, in microns per pixel. Determined from the store's
+        attributes and transformations when `None` (see `get_native`); a patch covers
+        ``patch_size * target_mpp`` microns only if this is the true pixel size.
     """
 
     def __init__(
@@ -58,6 +63,7 @@ class SpatialDataset(Dataset):
         target_mpp: float = 0.5,
         adata_transform: Compose | None = None,
         image_transform: Compose | None = None,
+        native_mpp: float | None = None,
     ):
         # read zarr file with spatialdata, unless an already-read store is given
         self.sdata = zarr_path if isinstance(zarr_path, sd.SpatialData) else sd.read_zarr(zarr_path)
@@ -98,30 +104,68 @@ class SpatialDataset(Dataset):
 
         # store all image hyperparameters
         self.patch_size = patch_size
-        self.native_mpp = self.get_native()
+        self.native_mpp = self.get_native() if native_mpp is None else native_mpp
         self.target_mpp = self.native_mpp if target_mpp is None else target_mpp
 
     def get_native(self):
         """
-        Estimate the store's native resolution, in microns per pixel.
+        Determine the pixel size of the H&E image, in microns per pixel.
 
-        Derived from the relative scale between the shape-space and pixel-space
-        affine transformations.
+        What a "global" unit is in microns depends on how the store was built, which is
+        recorded in ``sdata.attrs["spatialdata_io_reader"]``:
+
+        - ``"xenium"``: global is the morphology pixel grid, so one global unit is
+          ``attrs["source_mpp"]`` microns.
+        - ``"he"``: global is the H&E pixel grid, so the pixel size is
+          ``attrs["source_he_mpp"]`` directly, whatever the transformations are.
+        - no reader attribute: one global unit is read off the ``nucleus_boundaries``
+          transformation, which assumes the shapes are stored in microns. An identity
+          transformation cannot tell microns from pixels, so it is rejected.
 
         Returns
         -------
         Native resolution in microns per pixel.
-        """
-        scale, affine = self.shape_to_global, self.pixel_to_global
 
-        global_per_micron = (scale[0][0] + scale[1][1]) / 2
-        micron_per_global = 1 / global_per_micron
+        Raises
+        ------
+        ValueError
+            If the attribute the store's reader requires is missing, or the store has
+            neither a reader attribute nor a micron-scaled ``nucleus_boundaries``.
+        """
+        attrs, scale, affine = self.sdata.attrs, self.shape_to_global, self.pixel_to_global
+        reader = attrs.get("spatialdata_io_reader")
+
+        required = {"xenium": "source_mpp", "he": "source_he_mpp"}.get(reader)
+        if required is not None and required not in attrs:
+            raise ValueError(f"store read by '{reader}' has no '{required}' attribute; pass native_mpp explicitly")
+
+        if reader == "he":
+            return float(attrs["source_he_mpp"])
+
+        if reader == "xenium":
+            micron_per_global = attrs["source_mpp"]
+        elif np.allclose(scale, np.eye(3)):
+            raise ValueError(
+                "cannot determine the pixel size: the store has no 'spatialdata_io_reader' attribute and an "
+                "identity 'nucleus_boundaries' transformation; set 'source_he_mpp' or pass native_mpp explicitly"
+            )
+        else:
+            micron_per_global = 2 / (scale[0][0] + scale[1][1])
 
         scale_x = np.sqrt(affine[0, 0] ** 2 + affine[1, 0] ** 2)
         scale_y = np.sqrt(affine[0, 1] ** 2 + affine[1, 1] ** 2)
 
         global_per_pixel = (scale_x + scale_y) / 2.0
         micron_per_pixel = global_per_pixel * micron_per_global
+
+        # the two sources of a xenium store's pixel size should agree; a large gap points to a mis-set attribute
+        he_mpp = attrs.get("source_he_mpp")
+        if reader == "xenium" and he_mpp is not None and abs(micron_per_pixel / he_mpp - 1) > 0.05:
+            warnings.warn(
+                f"pixel size {micron_per_pixel:.4f} um/px derived from 'source_mpp' differs from "
+                f"'source_he_mpp' = {he_mpp:.4f} um/px by more than 5%",
+                stacklevel=2,
+            )
 
         return micron_per_pixel
 
