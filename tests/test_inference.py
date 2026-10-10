@@ -107,6 +107,28 @@ def test_flow_pipeline_handles_batch_size_one(pipeline_model):
     assert len(coords_list) == n_samples
 
 
+def test_flow_pipeline_call_equals_sample_batch_then_denormalize(pipeline_model):
+    """`__call__` must be exactly `sample_batch` per batch followed by one `denormalize`, RNG draws included."""
+    from torch.utils.data import DataLoader, TensorDataset
+
+    n_samples, n_genes, batch_size = 37, 3, 4  # the last batch is partial
+    feats = torch.randn(n_samples, 5, 16)
+    coords = torch.zeros(n_samples, 2)
+    loader = DataLoader(TensorDataset(feats, coords), batch_size=batch_size)
+
+    stats = {"mean": np.full(n_genes, 0.5), "std": np.full(n_genes, 2.0)}
+    pipeline = FlowPipeline(model=pipeline_model, stats=stats, atol=1e-1, rtol=1e-1)
+
+    torch.manual_seed(0)
+    expected, _ = pipeline(["A", "B", "C"], loader)
+
+    torch.manual_seed(0)
+    batches = [pipeline.sample_batch(feat, n_genes) for feat, _ in loader]
+    actual = pipeline.denormalize(np.concatenate(batches, axis=0))
+
+    np.testing.assert_array_equal(actual, expected)
+
+
 def test_run_fast_flow_matches_run_flow(tiny_model):
     """The K/V-caching sampler must produce the same output as run_flow."""
     from phoenix.helpers.fast_sampler import run_fast_flow
