@@ -139,8 +139,10 @@ READ_SELECTION = ("images", "shapes", "tables")
 GATHER_TIMEOUT = timedelta(hours=2)
 
 # Batches between progress-bar updates. Lightning's default Rich bar redraws in place and prints
-# only its final state when stdout is a file, so a SLURM log shows nothing until the store is done;
-# the tqdm bar appends a line per update instead.
+# only its final state when stdout is a file, so a log shows nothing until the store is done; the
+# tqdm bar writes every update, but as '\r'-separated redraws of one line that is only terminated when
+# the bar closes. Under `srun` that line is held back until then unless `srun -u` is used; read such a
+# log with `tr '\r' '\n' < log | tail`.
 PROGRESS_REFRESH_BATCHES = 10
 
 
