@@ -18,8 +18,8 @@ columns of `gex_pred` and the `mean`/`std` vectors in the statistics file.
 
 This script deliberately knows about exactly one device and takes an explicit list of stores; it does
 not glob a directory and it does not fan out across GPUs itself. Splitting work across the GPUs of a
-node and keeping all of them busy is a SLURM-and-bash concern, handled by `inference_node.sh`, not a
-concern of this file -- see `run_inference.sbatch`.
+node and keeping all of them busy is a SLURM-and-bash concern, handled by `slurm_scripts/run_inference.sbatch`
+(one `srun` step per store), not a concern of this file.
 
 Stores that already hold a `pred_table` are skipped unless `--overwrite` is given, which makes a run
 resumable: if the job hits its wall clock, resubmitting it picks up where it stopped.
@@ -397,8 +397,9 @@ def resolve_device(spec: str | None) -> str:
 
     Returns
     -------
-    The device string this process runs on. Under `inference_node.sh`, `CUDA_VISIBLE_DEVICES` already
-    restricts this process to one GPU, so "cuda" (with no index) is always the right default there.
+    The device string this process runs on. Under `slurm_scripts/run_inference.sbatch`, SLURM's
+    `CUDA_VISIBLE_DEVICES` already restricts this process to one GPU, so "cuda" (with no index) is always the
+    right default there.
     """
     if spec:
         return spec
