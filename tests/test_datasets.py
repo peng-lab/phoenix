@@ -192,6 +192,13 @@ def test_native_mpp_without_reader_attr_uses_shape_scale(tmp_path):
     assert SpatialDataset(store, "table", GENES).native_mpp == pytest.approx(he_mpp, rel=1e-6)
 
 
+def test_native_mpp_of_visium_store_is_source_he_mpp(tmp_path):
+    # visium stores are on the he pixel grid with identity transforms, like "he" ones
+    attrs = {"spatialdata_io_reader": "visium", "source_mpp": 0.3, "source_he_mpp": 0.3}
+    store, _ = make_layout_store(tmp_path / "store.zarr", "he", attrs=attrs)
+    assert SpatialDataset(store, "table", GENES).native_mpp == 0.3
+
+
 def test_native_mpp_override_wins(tmp_path):
     store, _ = make_layout_store(tmp_path / "store.zarr", "he")
     assert SpatialDataset(store, "table", GENES, native_mpp=0.3).native_mpp == 0.3
@@ -202,6 +209,7 @@ def test_native_mpp_override_wins(tmp_path):
     [
         ("he", {}),  # identity transforms and no attrs: the pixel size is unknowable
         ("he", {"spatialdata_io_reader": "he"}),  # missing source_he_mpp
+        ("he", {"spatialdata_io_reader": "visium"}),  # missing source_he_mpp
         ("xenium", {"spatialdata_io_reader": "xenium"}),  # missing source_mpp
     ],
 )

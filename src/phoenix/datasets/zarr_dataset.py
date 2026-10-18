@@ -116,7 +116,7 @@ class SpatialDataset(Dataset):
 
         - ``"xenium"``: global is the morphology pixel grid, so one global unit is
           ``attrs["source_mpp"]`` microns.
-        - ``"he"``: global is the H&E pixel grid, so the pixel size is
+        - ``"he"`` and ``"visium"``: global is the H&E pixel grid, so the pixel size is
           ``attrs["source_he_mpp"]`` directly, whatever the transformations are.
         - no reader attribute: one global unit is read off the ``nucleus_boundaries``
           transformation, which assumes the shapes are stored in microns. An identity
@@ -135,11 +135,11 @@ class SpatialDataset(Dataset):
         attrs, scale, affine = self.sdata.attrs, self.shape_to_global, self.pixel_to_global
         reader = attrs.get("spatialdata_io_reader")
 
-        required = {"xenium": "source_mpp", "he": "source_he_mpp"}.get(reader)
+        required = {"xenium": "source_mpp", "he": "source_he_mpp", "visium": "source_he_mpp"}.get(reader)
         if required is not None and required not in attrs:
             raise ValueError(f"store read by '{reader}' has no '{required}' attribute; pass native_mpp explicitly")
 
-        if reader == "he":
+        if reader in ("he", "visium"):
             return float(attrs["source_he_mpp"])
 
         if reader == "xenium":

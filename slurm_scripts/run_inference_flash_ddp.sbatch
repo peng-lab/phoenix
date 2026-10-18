@@ -19,6 +19,10 @@
 # REPO and VENV default to the main checkout; override them (same --export mechanism) to run against a
 # worktree, e.g. --export=ALL,REPO=/path/to/worktree,... The code under $REPO/src is what runs.
 #
+# The job is an array (`--array=0-3%4`: at most 4 nodes at once), each task running its share of the stores;
+# override with `sbatch --array=...`, or `--array=0` for a single job. SDATA_DIR may be a glob, e.g.
+# /path/cytassist_WT*/TENX.
+#
 # Optional: FAST=1 for the K/V-caching sampler.
 #
 # Stores that already hold a pred_table are skipped, so if the 24 h wall clock (the QoS maximum) is not
@@ -36,6 +40,7 @@
 #SBATCH --mem=500GB
 #SBATCH --gres=gpu:4
 #SBATCH --time=24:00:00
+#SBATCH --array=0-3%4
 #SBATCH --output=%x-%j.out
 
 set -euo pipefail
@@ -68,9 +73,15 @@ nvidia-smi --query-gpu=index,name,memory.total --format=csv || true
 LOG_DIR="$REPO/slurm_logs/${SLURM_JOB_NAME}-${SLURM_JOB_ID}"
 mkdir -p "$LOG_DIR"
 
-mapfile -t STORES < <(du -sb "$SDATA_DIR"/*.zarr | sort -rn | cut -f2)
+# SDATA_DIR is deliberately unquoted so it may be a glob matching several directories. The stores are sorted
+# by size and dealt round-robin to the array tasks, so each task gets a similar mix of large and small slides.
+mapfile -t ALL_STORES < <(du -sb $SDATA_DIR/*.zarr | sort -rn | cut -f2)
+STORES=()
+for i in "${!ALL_STORES[@]}"; do
+    (( i % ${SLURM_ARRAY_TASK_COUNT:-1} == ${SLURM_ARRAY_TASK_ID:-0} )) && STORES+=("${ALL_STORES[i]}")
+done
 if [[ ${#STORES[@]} -eq 0 ]]; then
-    echo "no .zarr stores found in $SDATA_DIR" >&2
+    echo "no .zarr stores for array task ${SLURM_ARRAY_TASK_ID:-0} in $SDATA_DIR" >&2
     exit 2
 fi
 echo "${#STORES[@]} store(s), one after another, each split across 4 gpu(s)"
