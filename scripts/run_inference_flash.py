@@ -13,14 +13,10 @@ different model.
 `flash_attn_func`, so this script is CUDA-only (sm_80+); there is no CPU path, unlike
 `run_inference.py`. Use `run_inference.py` on CPU or on GPUs older than Ampere.
 
-Each store can be split across several GPUs with Lightning DDP: launch one process per GPU (under
-`srun --ntasks-per-node=N`, which Lightning reads from the SLURM environment) and pass `--devices N`
-(and `--num-nodes`). Every rank reads the store and predicts every N-th cell; rank 0 puts the rows
-back in table order and writes the same `pred_table` a single-GPU run writes. Each rank seeds its
-sampler with `seed + rank`, so with one device the output is bit-identical to the unsharded script,
-and with several it differs from it only as much as a different seed would. With several devices a
-failed store aborts the job instead of being skipped (the other ranks would hang at the next
-collective); stores that already hold a `pred_table` are skipped, so resubmitting resumes.
+Everything else -- the docstrings on `predict_slide`, resumability via `pred_table`, one store per
+process, no multi-GPU fan-out here -- is exactly as documented in `run_inference.py`; see that file
+for the fuller explanation. `slurm_scripts/run_inference_flash.sbatch` runs this script one store
+per GPU; to split a single store across several GPUs, use `run_inference_flash_ddp.py`.
 
 Usage
 -----
@@ -30,9 +26,6 @@ Usage
         --stats /path/to/stats_table.npz \
         store_a.zarr store_b.zarr store_c.zarr
 
-    srun --ntasks-per-node=4 --gres=gpu:4 python run_inference_flash.py --devices 4 \
-        --weights ... --panel ... --stats ... store_a.zarr
-
 © Peng Lab / Helmholtz Munich
 """
 
@@ -41,18 +34,13 @@ import logging
 import sys
 import time
 from collections.abc import Mapping, Sequence
-from datetime import timedelta
 from pathlib import Path
 
 import anndata as ad
 import numpy as np
-import pytorch_lightning as pl
 import spatialdata as sd
 import timm
 import torch
-import torch.distributed as dist
-from pytorch_lightning.callbacks import BasePredictionWriter, TQDMProgressBar
-from pytorch_lightning.utilities import rank_zero_only
 from spatialdata.models import TableModel
 from torch.utils.data import DataLoader
 from torchvision.transforms import InterpolationMode, v2
@@ -134,36 +122,27 @@ VISION_MODEL = "vit_giant_patch14_reg4_dinov2"
 # returns a store with *no* tables rather than raising.
 READ_SELECTION = ("images", "shapes", "tables")
 
-# Timeout of the gloo group that gathers each rank's predictions on rank 0. Generous because ranks
-# wait there for the slowest one (adaptive step counts vary per batch) and for rank 0's zarr write.
-GATHER_TIMEOUT = timedelta(hours=2)
 
-# Batches between progress-bar updates. Lightning's default Rich bar redraws in place and prints
-# only its final state when stdout is a file, so a log shows nothing until the store is done; the
-# tqdm bar writes every update, but as '\r'-separated redraws of one line that is only terminated when
-# the bar closes. Under `srun` that line is held back until then unless `srun -u` is used; read such a
-# log with `tr '\r' '\n' < log | tail`.
-PROGRESS_REFRESH_BATCHES = 10
-
-
-def load_model(weights: str | Path) -> FlowTransformerModel:
+def load_model(weights: str | Path, device: str | torch.device) -> FlowTransformerModel:
     """
     Build the flow transformer with its frozen vision encoder and load the published weights.
 
     Uses the optimized `phoenix.models.flow_llama3` implementation (apex, flash-attn, xformers). The
     pure-torch `phoenix.models.flow_simple` variant is mathematically equivalent and runs anywhere,
-    including CPU; this one requires an sm_80+ CUDA device (`FlashAttention.forward` hardcodes
-    `device_type="cuda"` autocast and calls `flash_attn_func`).
+    including CPU; this one requires an sm_80+ CUDA device.
 
     Parameters
     ----------
     weights
         Path to a `flow_model.pth` checkpoint. It carries the DINOv2 encoder weights as well as the
         flow transformer's, which is why `strict=True` succeeds against a `pretrained=False` encoder.
+    device
+        CUDA device the model is moved to, e.g. ``"cuda:0"``. `FlashAttention.forward` hardcodes
+        `device_type="cuda"` autocast and calls `flash_attn_func`, so a CPU device fails here.
 
     Returns
     -------
-    The model in eval mode on CPU; `pl.Trainer` moves it to each rank's GPU.
+    The model in eval mode on `device`.
     """
     vision_model = timm.create_model(
         VISION_MODEL,
@@ -176,139 +155,19 @@ def load_model(weights: str | Path) -> FlowTransformerModel:
     )
     model = FlowTransformerModel(MODEL_CONFIG, vision_model=vision_model)
 
-    # `map_location="cpu"`, as in the notebook: the checkpoint is ~4.5 GB and loading it straight
-    # onto a GPU would need that much free device memory in one allocation.
+    # `map_location="cpu"` then `.to(device)`, as in the notebook: the checkpoint is ~4.5 GB and
+    # loading it straight onto a GPU would need that much free device memory in one allocation.
     state_dict = torch.load(weights, map_location="cpu")
     model.load_state_dict(state_dict, strict=True)
 
-    return model.eval()
-
-
-class PhoenixPredictor(pl.LightningModule):
-    """
-    Lightning wrapper that lets `pl.Trainer.predict` drive `FlowPipeline.sample_batch`.
-
-    Parameters
-    ----------
-    model
-        Model from `load_model`. `pl.Trainer` moves it to the rank's device.
-    stats
-        Mapping with ``"mean"`` and ``"std"`` entries, ``(n_genes,)`` each, in panel order.
-    n_genes
-        Panel size; sizes the initial noise.
-    atol
-        Absolute tolerance of the adaptive ODE solver.
-    rtol
-        Relative tolerance of the adaptive ODE solver.
-    fast
-        Whether to use the K/V-caching sampler. Slightly different numerically.
-    seed
-        Base seed. Each store's sampling is seeded with ``seed + rank`` at the start of `trainer.predict`,
-        so a store's output does not depend on how many stores came before it, and ranks do not share noise.
-    """
-
-    def __init__(
-        self,
-        model: FlowTransformerModel,
-        stats: Mapping[str, np.ndarray],
-        n_genes: int,
-        atol: float,
-        rtol: float,
-        fast: bool,
-        seed: int,
-    ):
-        super().__init__()
-        self.model = model
-        self.stats = stats
-        self.n_genes = n_genes
-        self.atol = atol
-        self.rtol = rtol
-        self.fast = fast
-        self.seed = seed
-
-    def on_predict_start(self) -> None:
-        """Seed this rank and build the pipeline; it captures the model's device, so it must follow the move to the GPU."""
-        # Seed per store, not per process, and per rank: ranks with the same seed would draw the same
-        # noise for neighbouring cells. With one rank this is plain `seed`.
-        torch.manual_seed(self.seed + self.global_rank)
-        self.pipeline = FlowPipeline(
-            model=self.model,
-            stats=self.stats,
-            t_0=0.0,
-            t_1=1.0,
-            atol=self.atol,
-            rtol=self.rtol,
-            fast=self.fast,
-        )
-
-    def predict_step(self, batch: tuple, batch_idx: int) -> np.ndarray:
-        """Sample one batch of ``(image, coords)``; returns ``(batch, n_genes)`` in normalized space."""
-        return self.pipeline.sample_batch(batch[0], self.n_genes)
-
-
-class OrderedPredictionGatherer(BasePredictionWriter):
-    """
-    Collect every rank's predictions on rank 0, in table order.
-
-    Lightning's distributed sampler gives each rank an interleaved subset of the cells, so the rows
-    have to be put back where they came from (the `batch_indices` of each batch) before the result
-    matches the single-GPU one. This callback only assembles the array; `predict_slide` writes the table.
-
-    Attributes
-    ----------
-    prediction
-        De-normalized predictions, ``(n_cells, n_genes)`` in table order. Set on rank 0 only.
-    """
-
-    def __init__(self):
-        super().__init__(write_interval="epoch")
-        self.prediction: np.ndarray | None = None
-        self._group = None
-
-    def write_on_epoch_end(self, trainer, pl_module, predictions, batch_indices) -> None:
-        """
-        Gather the ranks' rows on rank 0 and restore table order.
-
-        Parameters
-        ----------
-        trainer
-            The running trainer.
-        pl_module
-            The `PhoenixPredictor`, whose pipeline de-normalizes the result.
-        predictions
-            This rank's per-batch outputs of `predict_step`.
-        batch_indices
-            This rank's per-batch table row indices, one list per dataloader (there is one).
-        """
-        local = (np.concatenate(batch_indices[0]), np.concatenate(predictions))
-
-        if trainer.world_size == 1:
-            parts = [local]
-        else:
-            # gloo, so the (up to ~1 GB) payload moves over host memory and not through the GPUs
-            self._group = self._group or dist.new_group(backend="gloo", timeout=GATHER_TIMEOUT)
-            parts = [None] * trainer.world_size if trainer.is_global_zero else None
-            dist.gather_object(local, parts, dst=0, group=self._group)
-        if not trainer.is_global_zero:
-            return
-
-        indices = np.concatenate([part[0] for part in parts])
-        gathered = np.concatenate([part[1] for part in parts])
-        # a row filled twice or never would silently mis-assign cells in the written table
-        if not np.array_equal(np.sort(indices), np.arange(len(indices))):
-            raise ValueError("gathered row indices are not a permutation of the table rows")
-
-        ordered = np.empty_like(gathered)
-        ordered[indices] = gathered
-        self.prediction = pl_module.pipeline.denormalize(ordered)
+    return model.eval().to(device)
 
 
 def predict_slide(
     zarr_path: str | Path,
-    trainer: pl.Trainer,
-    predictor: PhoenixPredictor,
-    gatherer: OrderedPredictionGatherer,
+    model: FlowTransformerModel,
     gene_list: Sequence[str],
+    stats: Mapping[str, np.ndarray],
     *,
     table_key: str = "table",
     pred_key: str = "pred_table",
@@ -316,13 +175,16 @@ def predict_slide(
     num_workers: int = 0,
     patch_size: int = 224,
     target_mpp: float = 0.5,
+    atol: float = 1e-1,
+    rtol: float = 1e-1,
+    fast: bool = False,
+    seed: int = 0,
     overwrite: bool = False,
 ) -> int | None:
     """
-    Predict gene expression for one store, across all of the trainer's ranks, and write it back as a second table.
+    Predict gene expression for one store and write it back as a second table.
 
-    Every rank must call this with the same store. The prediction is assembled and written by rank 0 only,
-    into the *same* zarr store as `pred_key`, carrying `table_key`'s
+    The prediction is written into the *same* zarr store as `pred_key`, carrying `table_key`'s
     `obs`, `var`, `obsm["spatial"]` and `uns["spatialdata_attrs"]`. Copying the spatialdata attrs
     makes the new table annotate the same region element as the ground-truth table, which is what
     lets `spatialdata_plot` render either of them by gene name afterwards (pass `table_name=` to
@@ -332,14 +194,13 @@ def predict_slide(
     ----------
     zarr_path
         Path to a SpatialData `.zarr` store holding `he_image`, `nucleus_boundaries` and `table_key`.
-    trainer
-        Trainer that runs the prediction; its world size sets how many ranks share the store.
-    predictor
-        Wrapper around the model and the sampler settings.
-    gatherer
-        Callback registered on `trainer` that assembles the ranks' predictions on rank 0.
+    model
+        Model from `load_model`. Its device determines where sampling runs.
     gene_list
         The gene panel, in panel order. Also fixes the column order of the written table.
+    stats
+        Mapping with ``"mean"`` and ``"std"`` entries, ``(n_genes,)`` each, in panel order; used by
+        `FlowPipeline` to de-normalise predictions.
     table_key
         Key of the ground-truth table to take cells and metadata from.
     pred_key
@@ -352,15 +213,28 @@ def predict_slide(
         Side length, in pixels at `target_mpp`, of the patch extracted per cell.
     target_mpp
         Target resolution in microns per pixel.
+    atol
+        Absolute tolerance of the adaptive ODE solver.
+    rtol
+        Relative tolerance of the adaptive ODE solver.
+    fast
+        Whether to use the K/V-caching sampler. Slightly different numerically.
+    seed
+        Seed applied *before* this slide's sampling, so its output does not depend on how many other
+        slides the calling process handled first.
     overwrite
         Whether to replace an existing `pred_key`. When false, a store that already has one is
         skipped.
 
     Returns
     -------
-    Number of cells predicted, or `None` if the store already had `pred_key` and was skipped.
+    Number of cells written, or `None` if the store already had `pred_key` and was skipped.
     """
     name = Path(zarr_path).name
+
+    # Seed per slide, not per process: the sampler draws its initial noise from the global RNG, so
+    # without this a slide's prediction would depend on its position in the work queue.
+    torch.manual_seed(seed)
 
     sdata = sd.read_zarr(zarr_path, selection=READ_SELECTION)
     replacing = pred_key in sdata.tables
@@ -386,10 +260,8 @@ def predict_slide(
         crop_px,
         crop_px * dataset.native_mpp,
     )
-    # Lightning swaps in its distributed sampler under DDP, which hands each rank an interleaved
-    # subset of the cells; `shuffle=False` keeps that assignment (and the single-rank order) fixed.
-    # Cells are matched to predictions by table row alone -- `gatherer` restores the order from the
-    # batch indices, and there is no cell-id join anywhere downstream.
+    # `shuffle=False` is load-bearing, not a default: cells are matched to predictions by row
+    # position alone -- there is no cell-id join anywhere downstream.
     dataloader = DataLoader(
         dataset,
         batch_size=batch_size,
@@ -399,34 +271,42 @@ def predict_slide(
     )
 
     logger.info("%s: sampling %d cells over %d genes", name, len(dataset), len(gene_list))
-    trainer.predict(predictor, dataloader, return_predictions=False)
+    pipeline = FlowPipeline(
+        model=model,
+        stats=stats,
+        t_0=0.0,
+        t_1=1.0,
+        atol=atol,
+        rtol=rtol,
+        fast=fast,
+    )
+    # `coords_list` is discarded: it is the shape-space centroids, already in `obsm["spatial"]`.
+    gex_pred, _ = pipeline(list(gene_list), dataloader)
 
     adata = dataset.adata
-    if trainer.is_global_zero:
-        gex_pred = gatherer.prediction
-        expected = (adata.n_obs, len(gene_list))
-        if gex_pred.shape != expected:
-            # Fail loudly: a wrong shape here would silently mis-assign every gene in the written table.
-            raise ValueError(f"{name}: predicted {gex_pred.shape}, expected {expected}")
+    expected = (adata.n_obs, len(gene_list))
+    if gex_pred.shape != expected:
+        # Fail loudly: a wrong shape here would silently mis-assign every gene in the written table.
+        raise ValueError(f"{name}: predicted {gex_pred.shape}, expected {expected}")
 
-        if replacing:
-            # Delete first rather than relying on `overwrite=True` alone: `write_element` writes into the
-            # existing zarr group in place, so a previous table with different columns could leave stale
-            # arrays behind. Deleting here -- after sampling succeeded -- means a crash mid-inference
-            # leaves the old prediction intact.
-            sdata.delete_element_from_disk(pred_key)
+    if replacing:
+        # Delete first rather than relying on `overwrite=True` alone: `write_element` writes into the
+        # existing zarr group in place, so a previous table with different columns could leave stale
+        # arrays behind. Deleting here -- after sampling succeeded -- means a crash mid-inference
+        # leaves the old prediction intact.
+        sdata.delete_element_from_disk(pred_key)
 
-        # Wrap the prediction in an AnnData carrying table's metadata: `obs`/`var` verbatim (panel-ordered
-        # columns, original row order), plus `obsm["spatial"]` and `uns["spatialdata_attrs"]` so the new
-        # table annotates the same region as `table` and `spatialdata_plot` can render either by name.
-        pred = ad.AnnData(X=gex_pred.astype(np.float32), obs=adata.obs.copy(), var=adata.var.copy())
-        pred.obsm["spatial"] = adata.obsm["spatial"].copy()
-        pred.uns["spatialdata_attrs"] = dict(adata.uns["spatialdata_attrs"])
-        sdata[pred_key] = TableModel.parse(pred)
-        # `write_element` re-consolidates the store's metadata itself, walking what is on disk rather
-        # than what was read, so the unread `points`/`labels` elements survive intact.
-        sdata.write_element(pred_key, overwrite=overwrite)
-        logger.info("%s: wrote '%s' with %d cells", name, pred_key, adata.n_obs)
+    # Wrap the prediction in an AnnData carrying table's metadata: `obs`/`var` verbatim (panel-ordered
+    # columns, original row order), plus `obsm["spatial"]` and `uns["spatialdata_attrs"]` so the new
+    # table annotates the same region as `table` and `spatialdata_plot` can render either by name.
+    pred = ad.AnnData(X=gex_pred.astype(np.float32), obs=adata.obs.copy(), var=adata.var.copy())
+    pred.obsm["spatial"] = adata.obsm["spatial"].copy()
+    pred.uns["spatialdata_attrs"] = dict(adata.uns["spatialdata_attrs"])
+    sdata[pred_key] = TableModel.parse(pred)
+    # `write_element` re-consolidates the store's metadata itself, walking what is on disk rather
+    # than what was read, so the unread `points`/`labels` elements survive intact.
+    sdata.write_element(pred_key, overwrite=overwrite)
+    logger.info("%s: wrote '%s' with %d cells", name, pred_key, adata.n_obs)
 
     return adata.n_obs
 
@@ -466,10 +346,13 @@ def parse_args(argv: list[str] | None = None) -> argparse.Namespace:
 
     parser.add_argument("--atol", type=float, default=1e-1, help="ODE solver absolute tolerance")
     parser.add_argument("--rtol", type=float, default=1e-1, help="ODE solver relative tolerance")
-    parser.add_argument("--seed", type=int, default=0, help="seed, applied per slide (plus the rank)")
+    parser.add_argument("--seed", type=int, default=0, help="seed, applied per slide")
 
-    parser.add_argument("--devices", type=int, default=1, help="GPUs (= SLURM tasks) per node sharing each store")
-    parser.add_argument("--num-nodes", type=int, default=1, help="nodes sharing each store")
+    parser.add_argument(
+        "--device",
+        default=None,
+        help="CUDA device, e.g. 'cuda:0'; default is 'cuda' if visible. There is no CPU path.",
+    )
     parser.add_argument(
         "--fast",
         action="store_true",
@@ -480,17 +363,18 @@ def parse_args(argv: list[str] | None = None) -> argparse.Namespace:
     return parser.parse_args(argv)
 
 
-def configure_logging() -> None:
+def configure_logging(prefix: str) -> None:
     """
-    Send this process's log to stdout, tagged with its rank.
+    Send this process's log to stdout, tagged with who is speaking.
 
-    Only rank 0 logs progress; the other ranks log warnings and errors, so a store is not reported
-    once per GPU.
+    Parameters
+    ----------
+    prefix
+        Tag for the log line, e.g. the device this process runs on.
     """
-    rank = rank_zero_only.rank  # read from the SLURM/torchrun environment, so it is known before the Trainer exists
     logging.basicConfig(
-        level=logging.INFO if rank == 0 else logging.WARNING,
-        format=f"%(asctime)s [rank {rank}] %(levelname)s %(message)s",
+        level=logging.INFO,
+        format=f"%(asctime)s [{prefix}] %(levelname)s %(message)s",
         stream=sys.stdout,
         force=True,
     )
@@ -498,9 +382,28 @@ def configure_logging() -> None:
         logging.getLogger(name).setLevel(logging.WARNING)
 
 
+def resolve_device(spec: str | None) -> str:
+    """
+    Work out which CUDA device to run on.
+
+    Parameters
+    ----------
+    spec
+        Explicit torch device, or `None` to autodetect.
+
+    Returns
+    -------
+    The device string this process runs on. Under `inference_node.sh`, `CUDA_VISIBLE_DEVICES` already
+    restricts this process to one GPU, so "cuda" (with no index) is always the right default there.
+    """
+    if spec:
+        return spec
+    return "cuda" if torch.cuda.is_available() else "cpu"
+
+
 def main(argv: list[str] | None = None) -> int:
     """
-    Predict every given store, sharing each across the requested GPUs, and report what happened.
+    Predict every given store on one device and report what happened.
 
     Parameters
     ----------
@@ -512,13 +415,14 @@ def main(argv: list[str] | None = None) -> int:
     Process exit status: non-zero if any slide failed, or 2 if no CUDA device is available.
     """
     args = parse_args(argv)
-    configure_logging()
+    device = resolve_device(args.device)
+    configure_logging(device)
 
-    if not torch.cuda.is_available():
+    if not device.startswith("cuda"):
         # Fail before touching the model: `FlashAttention.forward` hardcodes a CUDA autocast and
         # calls `flash_attn_func`, so running this script on CPU fails deep inside the first forward
         # pass with an opaque CUDA error instead of a clear one.
-        logger.error("no CUDA device is available; flow_llama3 has no CPU path (use run_inference.py)")
+        logger.error("device '%s' is not CUDA; flow_llama3 has no CPU path (use run_inference.py)", device)
         return 2
 
     for label, path in (("weights", args.weights), ("panel", args.panel), ("stats", args.stats)):
@@ -527,10 +431,9 @@ def main(argv: list[str] | None = None) -> int:
             return 2
 
     logger.info(
-        "%d store(s) on %d device(s) x %d node(s); seed=%d atol=%g rtol=%g batch_size=%d num_workers=%d fast=%s",
+        "%d store(s) on %s; seed=%d atol=%g rtol=%g batch_size=%d num_workers=%d fast=%s",
         len(args.stores),
-        args.devices,
-        args.num_nodes,
+        device,
         args.seed,
         args.atol,
         args.rtol,
@@ -540,30 +443,9 @@ def main(argv: list[str] | None = None) -> int:
     )
 
     logger.info("loading %s", args.weights)
+    model = load_model(args.weights, device)
     gene_list = list(np.load(args.panel))
-    predictor = PhoenixPredictor(
-        load_model(args.weights),
-        np.load(args.stats),
-        n_genes=len(gene_list),
-        atol=args.atol,
-        rtol=args.rtol,
-        fast=args.fast,
-        seed=args.seed,
-    )
-    gatherer = OrderedPredictionGatherer()
-    # `inference_mode=False`: `run_flow` already runs under `torch.no_grad`, as before; "32-true" because
-    # flow_llama3 applies its own bf16 autocast and a Lightning precision plugin would stack on top of it.
-    trainer = pl.Trainer(
-        accelerator="gpu",
-        devices=args.devices,
-        num_nodes=args.num_nodes,
-        strategy="ddp" if args.devices * args.num_nodes > 1 else "auto",
-        precision="32-true",
-        inference_mode=False,
-        callbacks=[gatherer, TQDMProgressBar(refresh_rate=PROGRESS_REFRESH_BATCHES)],
-        logger=False,
-        enable_checkpointing=False,
-    )
+    stats = np.load(args.stats)
 
     written, skipped, failed = [], [], []
     for path in args.stores:
@@ -572,24 +454,23 @@ def main(argv: list[str] | None = None) -> int:
         try:
             n_cells = predict_slide(
                 path,
-                trainer,
-                predictor,
-                gatherer,
+                model,
                 gene_list,
+                stats,
                 table_key=args.table_key,
                 pred_key=args.pred_key,
                 batch_size=args.batch_size,
                 num_workers=args.num_workers,
                 patch_size=args.patch_size,
                 target_mpp=args.target_mpp,
+                atol=args.atol,
+                rtol=args.rtol,
+                fast=args.fast,
+                seed=args.seed,
                 overwrite=args.overwrite,
             )
         except Exception:
             logger.exception("%s: failed", name)
-            if trainer.world_size > 1:
-                # the other ranks would hang at the next collective; exiting non-zero lets
-                # `srun --kill-on-bad-exit=1` tear the step down, and a rerun resumes after the finished stores
-                raise
             failed.append(name)
             continue
 

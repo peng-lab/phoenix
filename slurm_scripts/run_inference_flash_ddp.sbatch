@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# Phoenix inference (run_inference_flash.py) with every SpatialData store split across all 4 GPUs of the node
+# Phoenix inference (run_inference_flash_ddp.py) with every SpatialData store split across all 4 GPUs of the node
 # (Lightning DDP).
 #
 # Where run_inference_flash.sbatch gives each GPU its own store, this script runs the stores one after
@@ -96,7 +96,7 @@ echo "${#STORES[@]} store(s), one after another, each split across 4 gpu(s)"
 # until a newline, so without it the log shows nothing until the whole store is done.
 for store in "${STORES[@]}"; do
     srun -u --ntasks-per-node=4 --gres=gpu:4 --gpu-bind=none --cpu-bind=none --kill-on-bad-exit=1 \
-        python "$REPO/scripts/run_inference_flash.py" \
+        python "$REPO/scripts/run_inference_flash_ddp.py" \
         --weights "$WEIGHTS" --panel "$PANEL" --stats "$STATS" --devices 4 \
         --batch-size "$BATCH_SIZE" --num-workers "$NUM_WORKERS" \
         --atol "$ATOL" --rtol "$RTOL" --seed "$SEED" ${FAST:+--fast} \
