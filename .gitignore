@@ -27,8 +27,7 @@ __pycache__/
 CLAUDE.md
 
 # site-specific SLURM orchestration -- not portable, kept out of the GitHub repo
-/scripts/*.sbatch
-/scripts/*.sh
+/slurm_scripts/*.sh
 /experimental/
 /slurm_logs/
 /.claude/

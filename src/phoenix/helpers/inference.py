@@ -106,13 +106,71 @@ class FlowPipeline:
         self.device = next(self.model.parameters()).device
 
     @torch.no_grad()
+    def sample_batch(self, image: torch.Tensor, n_genes: int) -> np.ndarray:
+        """
+        Sample normalized gene expression for one batch of patches.
+
+        Encodes the images with `model.vision_forward` and integrates the flow from
+        Gaussian noise. The result is neither clipped nor de-normalized; see
+        `denormalize`.
+
+        Parameters
+        ----------
+        image
+            Transformed patches, ``(batch, 3, height, width)``.
+        n_genes
+            Number of genes to sample; sizes the initial noise.
+
+        Returns
+        -------
+        Predicted expression in normalized space, ``(batch, n_genes)``.
+        """
+        device = self.device
+        sampler = run_fast_flow if self.fast else run_flow
+
+        image = image.to(device)
+        # nn.Module's __getattr__ stub can't see `vision_forward`, a method
+        # specific to FlowTransformerModel; declaring `model: nn.Module`
+        # keeps this pipeline decoupled from a specific model implementation.
+        feats = self.model.vision_forward(image)  # type: ignore[operator]
+        noise = torch.randn(image.size(0), n_genes, 1, device=device)
+
+        gex_pred = sampler(
+            flow_model=self.model,
+            x_0=noise.float(),
+            t_0=self.t_0,
+            t_1=self.t_1,
+            c=feats,
+            y=None,
+            atol=self.atol,
+            rtol=self.rtol,
+            device=device,
+        )
+
+        return gex_pred.float().squeeze(-1).detach().cpu().numpy()
+
+    def denormalize(self, gex_pred: np.ndarray) -> np.ndarray:
+        """
+        Clip normalized predictions at zero and map them back to the original scale.
+
+        Parameters
+        ----------
+        gex_pred
+            Predicted expression in normalized space, ``(n_cells, n_genes)``.
+
+        Returns
+        -------
+        De-normalized expression, ``(n_cells, n_genes)``.
+        """
+        return np.clip(gex_pred, 0, None) * self.std + self.mean
+
+    @torch.no_grad()
     def __call__(self, gene_list: list, dataloader: DataLoader):
         """
         Run the flow model on every batch in the dataloader.
 
-        Encodes each batch's images with `model.vision_forward`, samples gene
-        expression from Gaussian noise by integrating the flow, and de-normalizes
-        the result using the pipeline's stored `mean`/`std`.
+        Samples each batch with `sample_batch` and de-normalizes the concatenated
+        result with `denormalize`.
 
         Parameters
         ----------
@@ -127,36 +185,10 @@ class FlowPipeline:
         and the list of per-batch coordinate tensors.
         """
         self.model.eval()
-        device = self.device
-        sampler = run_fast_flow if self.fast else run_flow
 
         pred_list, coords_list = [], []
         for batch in tqdm(dataloader, desc="Flow sampling"):
-            image, coords = batch[0].to(device), batch[1]
-            # nn.Module's __getattr__ stub can't see `vision_forward`, a method
-            # specific to FlowTransformerModel; declaring `model: nn.Module`
-            # keeps this pipeline decoupled from a specific model implementation.
-            feats = self.model.vision_forward(image)  # type: ignore[operator]
-            noise = torch.randn(image.size(0), len(gene_list), 1, device=device)
+            pred_list.append(self.sample_batch(batch[0], len(gene_list)))
+            coords_list.append(batch[1])
 
-            gex_pred = sampler(
-                flow_model=self.model,
-                x_0=noise.float(),
-                t_0=self.t_0,
-                t_1=self.t_1,
-                c=feats,
-                y=None,
-                atol=self.atol,
-                rtol=self.rtol,
-                device=device,
-            )
-
-            gex_pred = gex_pred.float().squeeze(-1).detach().cpu().numpy()
-            pred_list.append(gex_pred)
-            coords_list.append(coords)
-
-        gex_pred = np.concatenate(pred_list, axis=0)
-        gex_pred = np.clip(gex_pred, 0, None)
-        gex_pred = gex_pred * self.std + self.mean
-
-        return gex_pred, coords_list
+        return self.denormalize(np.concatenate(pred_list, axis=0)), coords_list

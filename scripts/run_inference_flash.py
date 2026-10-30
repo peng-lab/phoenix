@@ -15,9 +15,8 @@ different model.
 
 Everything else -- the docstrings on `predict_slide`, resumability via `pred_table`, one store per
 process, no multi-GPU fan-out here -- is exactly as documented in `run_inference.py`; see that file
-for the fuller explanation. `inference_node.sh` / `run_inference.sbatch` still point at
-`run_inference.py`; point them at this script instead to use the optimized kernels on a node with the
-stack installed.
+for the fuller explanation. `slurm_scripts/run_inference_flash.sbatch` runs this script one store
+per GPU; to split a single store across several GPUs, use `run_inference_flash_ddp.py`.
 
 Usage
 -----
